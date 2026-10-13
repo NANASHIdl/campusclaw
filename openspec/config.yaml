@@ -1,0 +1,25 @@
+# OpenSpec 配置：给 AI 的上下文与规则
+schema: spec-driven
+
+context: |
+  CampusClaw 是面向中小学的教研智能体，覆盖学情分析、备课、命题、课堂与教研协同，
+  教研材料与知识库是其能力底座。
+  技术栈：Python + Flask + SQLite（标准库 sqlite3），服务端渲染（Jinja2）。
+  标准启动方式为 Docker Compose；应用提供 GET /health。
+  班级是数据边界，所有业务查询必须在服务端按会话中的班级过滤。
+
+rules:
+  proposal:
+    - 必须写明 Non-goals（不做什么），防止范围膨胀。
+    - 一次变更 = 一个 change，规划产物只放在 openspec/changes/<change>/ 下。
+  design:
+    - 技术栈固定为 Python + Flask + SQLite（标准库 sqlite3），服务端渲染。
+    - 班级隔离必须在服务端实现，前端隐藏按钮不算满足。
+    - 密码必须哈希存储，禁止明文；密钥只放服务端环境变量。
+    - 跨班访问统一返回 403。
+  specs:
+    - 每条 Requirement 的 Scenario 必须可判定通过或不通过。
+    - "使用 ADDED Requirements / Requirement / Scenario 的英文骨架。"
+  tasks:
+    - 按实现顺序分节，每条任务附 verify。
+    - checkbox 初稿全为 [ ]，勾选发生在 Apply 阶段。

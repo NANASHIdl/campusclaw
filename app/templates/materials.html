@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}本班材料 · CampusClaw{% endblock %}
+{% block header_meta %}
+  {{ username }} · <span class="tag">{{ '教师' if role == 'teacher' else '学生' }}</span>
+  班级 {{ class_id }}
+  <a href="{{ url_for('auth.logout') }}">退出</a>
+{% endblock %}
+{% block content %}
+  <div class="card">
+    <h1>本班材料</h1>
+    <p class="sub">列表仅展示你所属班级（班级 {{ class_id }}）的材料，数据来自数据库查询。</p>
+
+    {% if role == 'teacher' %}
+      <h2>上传材料</h2>
+      <form class="upload" method="post" enctype="multipart/form-data"
+            action="{{ url_for('materials.upload') }}" id="upload-form">
+        <input type="file" name="file" accept=".txt,.md" required>
+        <button type="submit">上传</button>
+      </form>
+      <p class="hint" id="upload-hint">支持 .txt / .md，单文件不超过 5MB；上传后解析写入知识库并出现在下方列表。</p>
+    {% else %}
+      <p class="hint">学生账号为只读：不提供上传入口，服务端也会拒绝任何上传请求。</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>材料列表（{{ materials|length }}）</h2>
+    {% if materials %}
+      <table>
+        <thead>
+          <tr><th>ID</th><th>标题</th><th>上传者</th><th>时间</th></tr>
+        </thead>
+        <tbody>
+          {% for m in materials %}
+            <tr>
+              <td>{{ m['id'] }}</td>
+              <td>{{ m['title'] }}</td>
+              <td>{{ m['uploaded_by'] or '—' }}</td>
+              <td>{{ m['created_at'] }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="empty">本班暂无材料。</div>
+    {% endif %}
+  </div>
+
+  {% if role == 'teacher' %}
+  <script>
+    document.getElementById('upload-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var form = e.target;
+      fetch(form.action, { method: 'POST', body: new FormData(form) })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          var hint = document.getElementById('upload-hint');
+          if (res.ok) {
+            hint.textContent = '上传成功：' + (res.d.title || '') + '，正在刷新列表…';
+            setTimeout(function () { location.reload(); }, 600);
+          } else {
+            hint.textContent = '上传失败：' + (res.d.error || '未知错误');
+          }
+        })
+        .catch(function () {
+          document.getElementById('upload-hint').textContent = '上传失败：网络错误';
+        });
+    });
+  </script>
+  {% endif %}
+{% endblock %}
