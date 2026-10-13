@@ -173,7 +173,7 @@ POST /api/materials/upload  (multipart/form-data)
 
 ```
 services:
-  web : nginx, ports ["8080:80"], depends_on api
+  web : nginx, ports ["${WEB_PORT:-8080}:80"], depends_on api
   api : go 服务, 不映射端口, volumes [uploads:/app/uploads], env_file .env
   db  : mysql:8, 不映射端口, volumes [db-data:/var/lib/mysql]
 volumes:
@@ -181,7 +181,7 @@ volumes:
   uploads   # 仅挂载到 api
 ```
 
-- 仅 `web` 发布宿主机端口；`api` 与 `db` 仅存在于容器网络内部。
+- 仅 `web` 发布宿主机端口（默认 8080，可用 `WEB_PORT` 覆盖）；`api` 与 `db` 仅存在于容器网络内部。
 - `docker compose down` 后再 `up`：容器重建但命名卷保留 → 账号与材料仍在。
 - `docker compose down -v` 删除数据卷 → 数据清空（仅用于主动重置）。
 - `api` 启动时等待 `db` 就绪，建表并（仅当为空时）写入种子。
@@ -199,12 +199,14 @@ volumes:
 | 4 | 跨班与不存在同构 404 | 跨班 403（会泄露资源存在性） |
 | 5 | 标准库 pbkdf2 口令哈希 | bcrypt / argon2 |
 | 6 | 命名卷持久化 | 绑定宿主机目录（`down -v` 不会清空，与课件不符） |
+| 7 | 依赖 `go mod vendor` 进仓库，镜像构建离线（`GOPROXY=off`） | 构建时访问 Go 代理（容器内常不可达） |
 
 ## Risks / Trade-offs
 
 - [进程内限流不跨副本] → 本课单副本演示环境足够；多副本需引入共享存储，属生产 HA，Non-goal。
 - [同构 404 增加排障难度] → 真实原因写入服务端日志。
 - [MySQL 首启较慢] → api 启动重试连接并等待就绪。
+- [容器内无法访问 Go 模块代理] → 依赖已 vendor 进仓库，构建不再需要网络；新增依赖时需重新执行 `go mod vendor`。
 
 ## Migration Plan
 

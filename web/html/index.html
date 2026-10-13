@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CampusClaw · 班级教研知识库</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">CampusClaw<span>班级教研知识库</span></div>
+    <div class="who" id="who" hidden>
+      <span id="who-text"></span>
+      <button id="logout" class="link" type="button">退出</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- 未登录视图 -->
+    <section id="view-login" class="card" hidden>
+      <h1>登录</h1>
+      <p class="sub">教师与学生均可登录。未登录访问受保护接口会返回 401。</p>
+      <form id="login-form" autocomplete="on">
+        <label for="username">用户名</label>
+        <input id="username" name="username" type="text" autocomplete="username" required autofocus>
+        <label for="password">密码</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button type="submit">登录</button>
+      </form>
+      <p class="hint">预置账号：<code>teacher_a</code>（A 班教师）、<code>student_a1</code>（A 班学生）、<code>student_b1</code>（B 班学生）</p>
+    </section>
+
+    <!-- 已登录视图 -->
+    <section id="view-app" hidden>
+      <div class="card">
+        <h1>本班材料</h1>
+        <p class="sub" id="scope-note"></p>
+
+        <div id="upload-block" hidden>
+          <h2>上传材料</h2>
+          <form id="upload-form">
+            <input type="file" name="file" accept=".txt,.md" required>
+            <button type="submit">上传</button>
+          </form>
+          <p class="hint">仅接受 <code>.txt</code> / <code>.md</code>；上传后解析写入知识库并出现在下方列表。</p>
+        </div>
+        <p class="hint" id="readonly-note" hidden>学生账号为只读：页面不提供上传入口，服务端也会拒绝上传请求（403）。</p>
+      </div>
+
+      <div class="card">
+        <h2 id="list-title">材料列表</h2>
+        <table id="materials">
+          <thead>
+            <tr><th>ID</th><th>标题</th><th>上传者</th><th>时间</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p class="empty" id="empty" hidden>本班暂无材料。</p>
+      </div>
+    </section>
+
+    <p id="message" class="message" hidden></p>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

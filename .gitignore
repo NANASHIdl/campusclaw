@@ -1,21 +1,20 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
-.pytest_cache/
-
-# 环境变量（含密钥）
+# 环境变量（含口令与密钥）
 .env
 
-# 运行时数据
-data/*.db
-!data/.gitkeep
-uploads/*
-!uploads/.gitkeep
+# Go 构建产物
+api/server
+api/server.exe
+*.test
+*.out
 
-# 编辑器
+# 本地运行时目录（Docker 使用命名卷）
+uploads/
+data/
+
+# 工具元数据
+.workbuddy-ai/
+
+# 编辑器与系统
 .idea/
 .vscode/
 .DS_Store

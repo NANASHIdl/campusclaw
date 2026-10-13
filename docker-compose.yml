@@ -1,20 +1,60 @@
+# CampusClaw —— web(Nginx) + api(Go) + db(MySQL)
+#
+# 端口暴露约定：仅 web 向宿主机发布端口；api 与 db 只存在于容器网络内部，
+# 客户端无法绕过反向代理直连 api 或数据库。
 services:
-  app:
-    build: .
+  web:
+    build: ./web
     ports:
-      - "8080:8080"
-    env_file:
-      - .env
-    environment:
-      DATABASE_PATH: data/app.db
-      UPLOAD_DIR: uploads
-    volumes:
-      - ./data:/app/data
-      - ./uploads:/app/uploads
+      # 仅 web 向宿主机发布端口；默认 8080，可用 WEB_PORT 覆盖（如端口被占用时）
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - api
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 5
-      start_period: 15s
+      start_period: 20s
     restart: unless-stopped
+
+  api:
+    build: ./api
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      # 上传目录仅挂载到 api，不作为静态资源对外暴露
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: mysql:8.0
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  # docker compose down 保留数据卷；down -v 才会清空
+  db-data:
+  uploads:
