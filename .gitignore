@@ -18,3 +18,7 @@ data/
 .idea/
 .vscode/
 .DS_Store
+
+# Python 缓存
+__pycache__/
+*.py[cod]
