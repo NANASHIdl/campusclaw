@@ -72,6 +72,19 @@ api · Go
 
 > 回退实现的意义是**可运行、可验收**，不是替代模型能力。本地嵌入是词面近似，不具备语义泛化；生产环境应配置课程网关。这一取舍已写入 Non-goals。
 
+### 课程网关的接口约定（实测）
+
+| 项 | 约定 |
+| --- | --- |
+| Base URL | `https://ai-gateway.devops.hello1023.com/v1`（配置**只写到 `/v1`**，由程序拼后缀） |
+| 嵌入 | `POST {base}/embeddings`，请求体**只含 `model` 与 `input`**；`EMBEDDING_DIM=2048` **不是请求参数**，而是读取 `data[0].embedding` 的长度用于建库与维度核对 |
+| 对话 | `POST {base}/chat/completions`，`model` 取课程对话模型名 |
+| 图片理解 | 同样走 `/chat/completions`，在 `messages` 中以 `image_url` 传入图片（本 change 不涉及，见 Non-goals） |
+| 请求体上限 | 单次请求不超过 **20MB** |
+| 模型名 | 网关只接受白名单内的课程模型名（用错时返回 400 并提示允许的模型） |
+
+本项目当前的 `.env` 配置：嵌入 `course-embedding`（2048 维）、对话 `course-chat`；密钥仅存于 `.env`（已被 `.gitignore` 忽略且未被 Git 跟踪）。
+
 ---
 
 ## 切分（Decision 2）

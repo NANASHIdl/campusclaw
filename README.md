@@ -80,14 +80,30 @@ docker compose down -v    # 删除数据卷 → 数据清空（仅用于主动�
 
 > 预处理只作用于待切分文本，`knowledge_entries.body_text` 保持上传原文。
 
-### 嵌入与对话网关（可选）
+### 嵌入与对话网关
 
 `EMBEDDING_BASE_URL` 与 `CHAT_BASE_URL` **留空时自动使用本地回退**：
 
 - 嵌入回退：字符 n-gram 特征哈希 → 2048 维、L2 归一化。**确定性**、可离线运行，但只是词面近似，不具备语义泛化能力。
-- 对话回退：从命中切片中**抽取**最相关的一句并标注出处，不生成新内容。
+- 对话回退：从命中切片中**抽取**最相关的一句并标注出处，**不调用任何模型**。
 
-生产环境应在 `.env` 中配置课程网关（兼容 OpenAI `/embeddings` 与 `/chat/completions`），密钥仅服务端持有。
+配置课程网关后即切换为真实模型（密钥仅服务端持有）：
+
+```bash
+EMBEDDING_BASE_URL=https://ai-gateway.devops.hello1023.com/v1
+EMBEDDING_MODEL=course-embedding
+EMBEDDING_DIM=2048          # 不是请求参数，用于建库与维度核对
+
+CHAT_BASE_URL=https://ai-gateway.devops.hello1023.com/v1
+CHAT_MODEL=course-chat
+CHAT_TIMEOUT_SECONDS=60
+```
+
+Base URL **只写到 `/v1`**，程序自行拼 `/embeddings` 与 `/chat/completions`；向量接口只提交 `model` 与 `input`；单次请求不超过 20MB。
+
+> ⚠️ **切换嵌入实现（本地回退 ⇄ 网关）或更换嵌入模型后，向量空间完全改变，必须重建索引**：
+> `docker compose down -v && docker compose up --build -d`，或由教师对每份材料调用 `POST /api/materials/{id}/reindex`。
+> 仅切换对话模型**不影响**索引。
 
 ## API
 

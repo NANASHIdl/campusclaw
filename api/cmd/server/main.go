@@ -82,6 +82,7 @@ func main() {
 		BaseURL: cfg.ChatBaseURL,
 		APIKey:  cfg.ChatAPIKey,
 		Model:   cfg.ChatModel,
+		Timeout: cfg.ChatTimeout,
 	})
 	log.Printf("对话实现=%s", chat.Kind())
 

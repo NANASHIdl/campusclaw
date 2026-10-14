@@ -51,6 +51,8 @@ type Config struct {
 	ChatBaseURL    string
 	ChatAPIKey     string
 	ChatModel      string
+	// ChatTimeout 是单次对话请求的超时；推理型模型耗时较长，默认 60s。
+	ChatTimeout time.Duration
 
 	// 检索参数：余弦阈值、RRF 常数、返回条数、问答取前几条切片。
 	VectorThreshold float64
@@ -100,6 +102,7 @@ func Load() (*Config, error) {
 	cfg.ChatBaseURL = getenv("CHAT_BASE_URL", "")
 	cfg.ChatAPIKey = getenv("CHAT_API_KEY", "")
 	cfg.ChatModel = getenv("CHAT_MODEL", "gpt-4o-mini")
+	cfg.ChatTimeout = time.Duration(getenvInt64("CHAT_TIMEOUT_SECONDS", 60)) * time.Second
 
 	cfg.VectorThreshold = getenvFloat("VECTOR_THRESHOLD", 0.35)
 	cfg.RRFK = int(getenvInt64("RRF_K", 60))
