@@ -32,30 +32,96 @@
 
     <!-- 已登录视图 -->
     <section id="view-app" hidden>
-      <div class="card">
-        <h1>本班材料</h1>
-        <p class="sub" id="scope-note"></p>
+      <nav class="tabs" id="tabs">
+        <button type="button" class="tab is-active" data-tab="materials">本班材料</button>
+        <button type="button" class="tab" data-tab="search">知识检索</button>
+        <button type="button" class="tab" data-tab="ask">知识问答</button>
+      </nav>
 
-        <div id="upload-block" hidden>
-          <h2>上传材料</h2>
-          <form id="upload-form">
-            <input type="file" name="file" accept=".txt,.md" required>
-            <button type="submit">上传</button>
-          </form>
-          <p class="hint">仅接受 <code>.txt</code> / <code>.md</code>；上传后解析写入知识库并出现在下方列表。</p>
+      <!-- 材料 -->
+      <div id="tab-materials">
+        <div class="card">
+          <h1>本班材料</h1>
+          <p class="sub" id="scope-note"></p>
+
+          <div id="upload-block" hidden>
+            <h2>上传材料</h2>
+            <form id="upload-form">
+              <input type="file" name="file" accept=".txt,.md" required>
+              <select id="upload-strategy" title="切分策略">
+                <option value="auto">自动分段（800 字 / 重叠 80）</option>
+                <option value="hierarchy">按标题层级分段</option>
+                <option value="custom">自定义分段</option>
+              </select>
+              <button type="submit">上传</button>
+            </form>
+            <p class="hint">仅接受 <code>.txt</code> / <code>.md</code>；上传后解析写入知识库，并自动切分、嵌入、写入向量库。</p>
+          </div>
+          <p class="hint" id="readonly-note" hidden>学生账号为只读：页面不提供上传入口，服务端也会拒绝上传请求（403）。学生可检索与提问本班材料。</p>
         </div>
-        <p class="hint" id="readonly-note" hidden>学生账号为只读：页面不提供上传入口，服务端也会拒绝上传请求（403）。</p>
+
+        <div class="card">
+          <h2 id="list-title">材料列表</h2>
+          <table id="materials">
+            <thead>
+              <tr><th>ID</th><th>标题</th><th>上传者</th><th>时间</th><th></th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <p class="empty" id="empty" hidden>本班暂无材料。</p>
+        </div>
+
+        <div class="card" id="vectors-card" hidden>
+          <h2 id="vectors-title">切片与向量</h2>
+          <p class="sub">切片正文存在 MySQL，向量存在 Qdrant。两边靠同一个编号关联：<code>knowledge_chunks.id</code> = 向量主键 = <code>payload.chunk_id</code>。检索时向量库先返回主键，再拿它回 MySQL 取正文。</p>
+          <p class="hint" id="vectors-meta"></p>
+          <div id="vectors-body"></div>
+        </div>
       </div>
 
-      <div class="card">
-        <h2 id="list-title">材料列表</h2>
-        <table id="materials">
-          <thead>
-            <tr><th>ID</th><th>标题</th><th>上传者</th><th>时间</th><th></th></tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-        <p class="empty" id="empty" hidden>本班暂无材料。</p>
+      <!-- 检索 -->
+      <div id="tab-search" hidden>
+        <div class="card">
+          <h1>知识检索</h1>
+          <p class="sub">以自然语言在本班材料中定位相关切片，每条结果都可回溯到材料、切片序号与字符区间。</p>
+          <form id="search-form">
+            <label for="search-q">问题</label>
+            <input id="search-q" type="text" placeholder="例如：课间追逐打闹可以吗？" autocomplete="off">
+            <label for="search-mode">检索模式</label>
+            <select id="search-mode">
+              <option value="hybrid">混合（默认，RRF 融合）</option>
+              <option value="vector">仅向量（语义相近）</option>
+              <option value="keyword">仅关键字（原词命中）</option>
+            </select>
+            <button type="submit">检索</button>
+          </form>
+          <p class="hint">点击示例：<a href="#" class="example" data-q="课间追逐打闹可以吗？">课间追逐打闹可以吗？</a> · <a href="#" class="example" data-q="磁铁能吸木块吗？">磁铁能吸木块吗？</a> · <a href="#" class="example" data-q="明天的天气怎么样？">明天的天气怎么样？</a></p>
+        </div>
+        <div class="card" id="search-result-card" hidden>
+          <h2 id="search-result-title">检索结果</h2>
+          <p class="hint" id="search-note"></p>
+          <div id="search-vector"></div>
+          <div id="search-hits"></div>
+        </div>
+      </div>
+
+      <!-- 问答 -->
+      <div id="tab-ask" hidden>
+        <div class="card">
+          <h1>知识问答</h1>
+          <p class="sub">先在本班做混合检索，取前 4 条切片；有依据才调用生成模型，并在回答中标注出处。没有命中时不调用模型，直接说明资料里没有。</p>
+          <form id="ask-form">
+            <label for="ask-q">提问</label>
+            <input id="ask-q" type="text" placeholder="例如：课间追逐打闹可以吗？" autocomplete="off">
+            <button type="submit">检索并回答</button>
+          </form>
+        </div>
+        <div class="card" id="ask-result-card" hidden>
+          <h2>依据回答</h2>
+          <p id="ask-answer"></p>
+          <p class="hint" id="ask-status"></p>
+          <div id="ask-citations"></div>
+        </div>
       </div>
     </section>
 

@@ -33,6 +33,30 @@ type Config struct {
 
 	LoginRateLimit  int
 	LoginRateWindow time.Duration
+
+	// --- 第 4 课：向量库与模型网关 ---
+	//
+	// QdrantURL 为容器网络内的向量库地址；集合名与维度需与嵌入网关输出一致。
+	QdrantURL        string
+	QdrantCollection string
+	VectorDim        int
+
+	// 嵌入网关与对话网关均可选：未配置 BaseURL 时使用本地确定性回退，
+	// 使整条检索链路在无外部凭据时仍可离线运行与验收。
+	EmbeddingBaseURL string
+	EmbeddingAPIKey  string
+	EmbeddingModel   string
+	// LocalEmbedBias 是本地回退嵌入的背景分量权重；仅在不配置网关时生效。
+	LocalEmbedBias float64
+	ChatBaseURL    string
+	ChatAPIKey     string
+	ChatModel      string
+
+	// 检索参数：余弦阈值、RRF 常数、返回条数、问答取前几条切片。
+	VectorThreshold float64
+	RRFK            int
+	SearchLimit     int
+	AskTopN         int
 }
 
 func Load() (*Config, error) {
@@ -63,6 +87,23 @@ func Load() (*Config, error) {
 	// 种子口令允许缺省（例如库已初始化时），但一旦提供就用于种子写入。
 	cfg.SeedTeacherPassword = getenv("SEED_TEACHER_PASSWORD", "")
 	cfg.SeedStudentPassword = getenv("SEED_STUDENT_PASSWORD", "")
+
+	cfg.QdrantURL = getenv("QDRANT_URL", "http://qdrant:6333")
+	cfg.QdrantCollection = getenv("QDRANT_COLLECTION", "campusclaw_chunks")
+	cfg.VectorDim = int(getenvInt64("VECTOR_DIM", 2048))
+
+	cfg.EmbeddingBaseURL = getenv("EMBEDDING_BASE_URL", "")
+	cfg.EmbeddingAPIKey = getenv("EMBEDDING_API_KEY", "")
+	cfg.EmbeddingModel = getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+	cfg.LocalEmbedBias = getenvFloat("LOCAL_EMBED_BIAS", 0.60)
+	cfg.ChatBaseURL = getenv("CHAT_BASE_URL", "")
+	cfg.ChatAPIKey = getenv("CHAT_API_KEY", "")
+	cfg.ChatModel = getenv("CHAT_MODEL", "gpt-4o-mini")
+
+	cfg.VectorThreshold = getenvFloat("VECTOR_THRESHOLD", 0.35)
+	cfg.RRFK = int(getenvInt64("RRF_K", 60))
+	cfg.SearchLimit = int(getenvInt64("SEARCH_LIMIT", 10))
+	cfg.AskTopN = int(getenvInt64("ASK_TOP_N", 4))
 
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("缺少必需环境变量: %s（参见 .env.example）", strings.Join(missing, ", "))
@@ -98,4 +139,16 @@ func getenvInt64(key string, def int64) int64 {
 		return def
 	}
 	return n
+}
+
+func getenvFloat(key string, def float64) float64 {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return def
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return def
+	}
+	return f
 }

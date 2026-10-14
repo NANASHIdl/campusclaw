@@ -4,19 +4,29 @@ schema: spec-driven
 context: |
   CampusClaw 是面向中小学的教研智能体，覆盖学情分析、备课、命题、课堂与教研协同，
   教研材料与知识库是其能力底座。
-  技术栈：Python + Flask + SQLite（标准库 sqlite3），服务端渲染（Jinja2）。
+  技术栈：web(Nginx) + api(Go) + db(MySQL 8) + qdrant(向量库) 四容器；仅 web 映射宿主机端口。
   标准启动方式为 Docker Compose；应用提供 GET /health。
   班级是数据边界，所有业务查询必须在服务端按会话中的班级过滤。
+  检索：切片正文存 MySQL（knowledge_chunks），向量存 Qdrant（仅编号，不含正文）；
+  向量主键 = knowledge_chunks.id；三模式 keyword/vector/hybrid，默认 hybrid，RRF k=60，向量阈值 0.35。
 
 rules:
   proposal:
     - 必须写明 Non-goals（不做什么），防止范围膨胀。
     - 一次变更 = 一个 change，规划产物只放在 openspec/changes/<change>/ 下。
   design:
-    - 技术栈固定为 Python + Flask + SQLite（标准库 sqlite3），服务端渲染。
-    - 班级隔离必须在服务端实现，前端隐藏按钮不算满足。
-    - 密码必须哈希存储，禁止明文；密钥只放服务端环境变量。
-    - 跨班访问统一返回 403。
+    - 技术栈固定为 web(Nginx) + api(Go) + db(MySQL)，仅 web 映射宿主机端口。
+    - 认证、授权与班级隔离全部在服务端完成；前端隐藏按钮不算满足。
+    - 班级只取自服务端会话，请求中自报的 role/class_id 一律丢弃。
+    - 口令必须哈希存储，禁止明文；数据库口令与会话密钥只放环境变量。
+    - 登录成功必须换发新的会话标识（防会话固定）；库中只存标识摘要。
+    - 跨班访问与记录不存在统一返回同构 404。
+    - 上传白名单校验 → 落盘 → 两表同一事务；失败回滚并清理文件。
+    - 检索侧班级隔离：关键字与向量两条路径均须带会话班级条件，回表时再次核对。
+    - 跨班检索表现为 200 + 空命中，不得用 403/404 暗示资源归属。
+    - 无命中切片时不调用生成模型，直接返回「资料中未找到相关内容」。
+    - 摘录与引用一律取自 MySQL 切片正文，向量库不保存正文。
+    - 嵌入失败时材料保留、切片标记 failed，不写入不完整向量。
   specs:
     - 每条 Requirement 的 Scenario 必须可判定通过或不通过。
     - "使用 ADDED Requirements / Requirement / Scenario 的英文骨架。"

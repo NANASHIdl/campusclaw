@@ -1,7 +1,7 @@
-# CampusClaw —— web(Nginx) + api(Go) + db(MySQL)
+# CampusClaw —— web(Nginx) + api(Go) + db(MySQL) + qdrant(向量库)
 #
-# 端口暴露约定：仅 web 向宿主机发布端口；api 与 db 只存在于容器网络内部，
-# 客户端无法绕过反向代理直连 api 或数据库。
+# 端口暴露约定：仅 web 向宿主机发布端口；api、db 与 qdrant 只存在于容器网络内部，
+# 客户端无法绕过反向代理直连 api、数据库或向量库。
 services:
   web:
     build: ./web
@@ -26,12 +26,16 @@ services:
       DB_HOST: db
       DB_PORT: "3306"
       UPLOAD_DIR: /app/uploads
+      # 向量库只在容器网络内可达，不映射宿主机端口
+      QDRANT_URL: http://qdrant:6333
     volumes:
       # 上传目录仅挂载到 api，不作为静态资源对外暴露
       - uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
+      qdrant:
+        condition: service_started
     restart: unless-stopped
 
   db:
@@ -39,6 +43,8 @@ services:
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
+      # 中文全文索引依赖 ngram 分词器；token 长度为 2，与课件一致
+      - --ngram_token_size=2
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME}
@@ -54,7 +60,15 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    # 不映射宿主机端口：客户端无法直连向量库
+    volumes:
+      - qdrant-data:/qdrant/storage
+    restart: unless-stopped
+
 volumes:
   # docker compose down 保留数据卷；down -v 才会清空
   db-data:
   uploads:
+  qdrant-data:

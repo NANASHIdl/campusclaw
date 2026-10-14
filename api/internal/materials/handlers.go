@@ -19,7 +19,9 @@ import (
 	"strings"
 
 	"campusclaw/api/internal/auth"
+	"campusclaw/api/internal/chunk"
 	"campusclaw/api/internal/httpx"
+	"campusclaw/api/internal/index"
 )
 
 // Handler 持有材料接口所需的依赖。
@@ -27,10 +29,12 @@ type Handler struct {
 	DB             *sql.DB
 	UploadDir      string
 	MaxUploadBytes int64
+	// Indexer 在材料入库后建立切片与向量索引；为 nil 时跳过索引（仅测试场景）。
+	Indexer *index.Service
 }
 
-func NewHandler(db *sql.DB, uploadDir string, maxUploadBytes int64) *Handler {
-	return &Handler{DB: db, UploadDir: uploadDir, MaxUploadBytes: maxUploadBytes}
+func NewHandler(db *sql.DB, uploadDir string, maxUploadBytes int64, indexer *index.Service) *Handler {
+	return &Handler{DB: db, UploadDir: uploadDir, MaxUploadBytes: maxUploadBytes, Indexer: indexer}
 }
 
 type listItem struct {
@@ -249,7 +253,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	materialID, err := h.insertMaterialWithKnowledge(title, classID, destPath, user.ID, string(raw))
+	materialID, entryID, err := h.insertMaterialWithKnowledge(title, classID, destPath, user.ID, string(raw))
 	if err != nil {
 		// 事务失败：清理已写入的文件，避免「有文件无记录」的孤儿状态
 		if rmErr := os.Remove(destPath); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
@@ -260,8 +264,30 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("upload ok: material_id=%d class_id=%d user=%s title=%q", materialID, classID, user.Username, title)
-	httpx.JSON(w, http.StatusCreated, map[string]any{"material_id": materialID, "title": title})
+	// 原文与正文已提交；此后建立切片与向量索引。
+	// 索引失败不影响材料可用性（课件：材料记录仍然保留，切片标记 failed）。
+	chunkCount := 0
+	if h.Indexer != nil {
+		opt, optErr := chunkOptionsFromForm(r)
+		if optErr != nil {
+			log.Printf("切分参数不合法，回退 auto: %v", optErr)
+			opt = chunk.Options{Strategy: chunk.StrategyAuto}
+		}
+		n, idxErr := h.Indexer.IndexMaterial(r.Context(), materialID, classID, entryID, string(raw), opt)
+		if idxErr != nil {
+			log.Printf("索引失败（材料已保留）material_id=%d: %v", materialID, idxErr)
+		} else {
+			chunkCount = n
+		}
+	}
+
+	log.Printf("upload ok: material_id=%d class_id=%d chunks=%d user=%s title=%q",
+		materialID, classID, chunkCount, user.Username, title)
+	httpx.JSON(w, http.StatusCreated, map[string]any{
+		"material_id": materialID,
+		"title":       title,
+		"chunk_count": chunkCount,
+	})
 }
 
 // --- 内部辅助 ---------------------------------------------------------------
@@ -289,10 +315,10 @@ func (h *Handler) fetchMaterial(id int64) (materialRow, bool, error) {
 }
 
 // insertMaterialWithKnowledge 在单个事务中写入两张带租户列的表。
-func (h *Handler) insertMaterialWithKnowledge(title string, classID int64, filePath string, uploaderID int64, body string) (int64, error) {
+func (h *Handler) insertMaterialWithKnowledge(title string, classID int64, filePath string, uploaderID int64, body string) (int64, int64, error) {
 	tx, err := h.DB.Begin()
 	if err != nil {
-		return 0, fmt.Errorf("开启事务失败: %w", err)
+		return 0, 0, fmt.Errorf("开启事务失败: %w", err)
 	}
 	defer func() {
 		_ = tx.Rollback() // Commit 成功后 Rollback 是空操作
@@ -303,22 +329,27 @@ func (h *Handler) insertMaterialWithKnowledge(title string, classID int64, fileP
 		title, classID, filePath, uploaderID,
 	)
 	if err != nil {
-		return 0, fmt.Errorf("写入 materials 失败: %w", err)
+		return 0, 0, fmt.Errorf("写入 materials 失败: %w", err)
 	}
 	materialID, err := res.LastInsertId()
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	if _, err := tx.Exec(
+	entry, err := tx.Exec(
 		`INSERT INTO knowledge_entries (material_id, class_id, body_text) VALUES (?, ?, ?)`,
 		materialID, classID, body,
-	); err != nil {
-		return 0, fmt.Errorf("写入 knowledge_entries 失败: %w", err)
+	)
+	if err != nil {
+		return 0, 0, fmt.Errorf("写入 knowledge_entries 失败: %w", err)
+	}
+	entryID, err := entry.LastInsertId()
+	if err != nil {
+		return 0, 0, err
 	}
 	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("提交事务失败: %w", err)
+		return 0, 0, fmt.Errorf("提交事务失败: %w", err)
 	}
-	return materialID, nil
+	return materialID, entryID, nil
 }
 
 func pathID(r *http.Request) (int64, bool) {

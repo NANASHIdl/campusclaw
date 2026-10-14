@@ -12,10 +12,10 @@ import (
 )
 
 const (
-	hashScheme     = "pbkdf2_sha256"
-	pbkdf2Iters    = 120_000
-	pbkdf2KeyLen   = 32
-	pbkdf2SaltLen  = 16
+	hashScheme      = "pbkdf2_sha256"
+	pbkdf2Iters     = 120_000
+	pbkdf2KeyLen    = 32
+	pbkdf2SaltLen   = 16
 	encodedSegments = 4
 )
 

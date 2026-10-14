@@ -106,3 +106,94 @@ td a { color: var(--accent); text-decoration: none; }
 }
 .message.error { color: var(--danger); background: var(--danger-weak); border-color: #f5c2c2; }
 .message.info { color: var(--accent); background: var(--accent-weak); border-color: #c7d6ff; }
+
+/* --- 第 4 课：检索与问答 --- */
+
+select {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  background: #fff;
+  color: var(--text);
+}
+
+.tabs { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
+.tab {
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  font-weight: 400;
+}
+.tab.is-active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+button.link {
+  background: none;
+  color: var(--accent);
+  border: none;
+  padding: 0;
+  margin-left: 10px;
+  font-size: 13px;
+  font-weight: 400;
+}
+td button.link { margin-left: 0; }
+td a + button.link { margin-left: 12px; }
+
+.hint a { color: var(--accent); }
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.badge {
+  display: inline-block;
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-weak);
+  color: var(--accent);
+  margin-right: 8px;
+}
+.badge.ok { background: #e6f5ec; color: #14713d; }
+.badge.warn { background: var(--danger-weak); color: var(--danger); }
+
+.chunk, .hit {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: #fcfcfb;
+}
+
+.chunk-head, .hit-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.hit-title { font-weight: 500; }
+
+.excerpt {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chunk .hint, .hit .hint { margin: 0; }
+
+#ask-answer {
+  font-size: 15px;
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+#search-result-card .hint { margin: 0 0 12px; }
+#search-vector .hint { margin-bottom: 12px; }
+

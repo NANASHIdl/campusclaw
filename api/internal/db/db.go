@@ -91,6 +91,28 @@ var schema = []string{
 		INDEX idx_ke_class (class_id),
 		INDEX idx_ke_material (material_id)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+	// 第 4 课：切片是检索的最小单位。正文存 MySQL，向量存 Qdrant；
+	// 向量主键 = 本表主键。chunk_text 建 ngram 全文索引供关键字检索。
+	`CREATE TABLE IF NOT EXISTS knowledge_chunks (
+		id                 BIGINT AUTO_INCREMENT PRIMARY KEY,
+		knowledge_entry_id BIGINT NOT NULL,
+		material_id        BIGINT NOT NULL,
+		class_id           INT NOT NULL,
+		chunk_index        INT NOT NULL,
+		chunk_text         MEDIUMTEXT NOT NULL,
+		start_offset       INT NOT NULL,
+		end_offset         INT NOT NULL,
+		index_status       ENUM('ready','failed') NOT NULL DEFAULT 'ready',
+		chunk_strategy     VARCHAR(16) NOT NULL,
+		created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		CONSTRAINT fk_chunks_entry FOREIGN KEY (knowledge_entry_id) REFERENCES knowledge_entries(id) ON DELETE CASCADE,
+		CONSTRAINT fk_chunks_material FOREIGN KEY (material_id) REFERENCES materials(id) ON DELETE CASCADE,
+		CONSTRAINT fk_chunks_class FOREIGN KEY (class_id) REFERENCES classes(id),
+		INDEX idx_chunks_class (class_id),
+		INDEX idx_chunks_material (material_id),
+		FULLTEXT KEY ft_chunks_text (chunk_text) WITH PARSER ngram
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 }
 
 // Migrate 建表（幂等）。
@@ -110,6 +132,60 @@ type seedMaterial struct {
 	body    string
 	relPath string
 }
+
+const seedQuadratic = `# 一元二次方程讲义
+
+## 定义
+
+只含一个未知数，并且未知数的最高次数是 2 的整式方程，叫做一元二次方程。
+一般形式写成 ax² + bx + c = 0，其中二次项系数 a 不能等于 0。
+
+## 求根公式
+
+当判别式 Δ = b² − 4ac 大于或等于 0 时，方程的根可以直接写出来：
+x = (−b ± √Δ) / (2a)。代入时先算判别式，再算分子，最后除以 2a。
+
+## 判别式的作用
+
+Δ 大于 0 时，方程有两个不相等的实数根。
+Δ 等于 0 时，方程有两个相等的实数根，也叫做重根。
+Δ 小于 0 时，方程没有实数根，此时求根公式中的根号内为负数。
+
+## 常见错误
+
+第一，忘记讨论 a = 0 的情形；当 a = 0 时方程退化为一次方程，不再是二次方程。
+第二，把判别式的正负与根的正负混为一谈：判别式判断的是根的个数，不是根的大小。
+第三，代入求根公式时漏写分母 2a，或把 −b 的负号丢掉。
+
+## 练习
+
+解方程 x² − 5x + 6 = 0。这里 a = 1，b = −5，c = 6，判别式为 25 − 24 = 1，两根为 2 与 3。
+解方程 x² + 2x + 5 = 0。判别式为 4 − 20 = −16 小于 0，因此没有实数根。
+`
+
+const seedPhotosynthesis = `# 光合作用讲义
+
+## 光反应阶段
+
+光反应在叶绿体的类囊体薄膜上进行。水在这里被分解，产生氧气并释放出电子。
+光能被色素吸收后转化为活跃的化学能，储存在 ATP 与 NADPH 中。
+
+## 暗反应阶段
+
+暗反应在叶绿体基质中进行，不需要光直接参与，但需要光反应提供的 ATP 与 NADPH。
+二氧化碳在这一阶段被固定，经过还原最终形成有机物。这一过程也叫做卡尔文循环。
+
+## 影响因素
+
+光照强度、二氧化碳浓度与温度都会影响光合作用的速率。
+光照过强时气孔关闭，二氧化碳供应不足，速率反而下降。
+温度主要通过影响酶的活性起作用，温度过高会使酶变性失活。
+
+## 与呼吸作用的关系
+
+光合作用合成有机物并储存能量，呼吸作用分解有机物并释放能量。
+白天两者同时进行，夜间只有呼吸作用进行。
+`
 
 // Seed 在库为空时写入种子数据：两个可区分班级、各自教师与学生、两条可区分标题的材料。
 // 幂等：users 非空即跳过，重复启动不会重复写入。
@@ -159,9 +235,10 @@ func Seed(database *sql.DB, cfg *config.Config) error {
 	}
 
 	// 种子材料同时落盘，保证下载接口对预置数据也可验收。
+	// 正文含 Markdown 标题与多段落，使 auto 与 hierarchy 切分策略都有可演示的输入。
 	materials := []seedMaterial{
-		{1, "A 班 · 一元二次方程讲义", "本讲义覆盖一元二次方程的定义、求根公式与判别式。", filepath.Join("1", "seed_a_quadratic.md")},
-		{2, "B 班 · 光合作用讲义", "本讲义覆盖光合作用的光反应与暗反应阶段。", filepath.Join("2", "seed_b_photosynthesis.md")},
+		{1, "A 班 · 一元二次方程讲义", seedQuadratic, filepath.Join("1", "seed_a_quadratic.md")},
+		{2, "B 班 · 光合作用讲义", seedPhotosynthesis, filepath.Join("2", "seed_b_photosynthesis.md")},
 	}
 	for _, m := range materials {
 		abs := filepath.Join(cfg.UploadDir, m.relPath)
