@@ -83,8 +83,18 @@ func Normalize(opt Options) (Options, error) {
 			return opt, fmt.Errorf("重叠比例须在 0%% 至 50%% 之间")
 		}
 	case StrategyHierarchy:
-		opt.MaxChars = DefaultMaxChars
-		opt.OverlapPercent = 10
+		// 按标题分章，但「某章过长时再按重叠比例切开」——因此最大长度与
+		// 重叠比例同样是可配置参数（默认 800 / 10%）。
+		if opt.MaxChars == 0 {
+			opt.MaxChars = DefaultMaxChars
+		}
+		if opt.MaxChars < CustomMinChars || opt.MaxChars > CustomMaxChars {
+			return opt, fmt.Errorf("最大长度须在 %d 至 %d 之间", CustomMinChars, CustomMaxChars)
+		}
+		if opt.OverlapPercent < 0 || opt.OverlapPercent > 50 {
+			return opt, fmt.Errorf("重叠比例须在 0%% 至 50%% 之间")
+		}
+		// 分章依据标题层级，预处理与自定义分隔符不适用。
 		opt.RemoveURLs = false
 		opt.CollapseWhitespace = false
 		opt.Separators = nil

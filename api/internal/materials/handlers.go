@@ -19,7 +19,6 @@ import (
 	"strings"
 
 	"campusclaw/api/internal/auth"
-	"campusclaw/api/internal/chunk"
 	"campusclaw/api/internal/httpx"
 	"campusclaw/api/internal/index"
 )
@@ -220,6 +219,14 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 分段参数同样在落盘之前校验：越界直接拒绝，不产生文件与记录。
+	chunkOpt, err := chunkOptionsFromForm(r)
+	if err != nil {
+		log.Printf("upload rejected: reason=bad_chunk_params %v user=%s", err, user.Username)
+		httpx.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
 	raw, err := io.ReadAll(io.LimitReader(file, h.MaxUploadBytes+1))
 	if err != nil {
 		httpx.Error(w, http.StatusBadRequest, httpx.CodeBadRequest)
@@ -268,12 +275,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	// 索引失败不影响材料可用性（课件：材料记录仍然保留，切片标记 failed）。
 	chunkCount := 0
 	if h.Indexer != nil {
-		opt, optErr := chunkOptionsFromForm(r)
-		if optErr != nil {
-			log.Printf("切分参数不合法，回退 auto: %v", optErr)
-			opt = chunk.Options{Strategy: chunk.StrategyAuto}
-		}
-		n, idxErr := h.Indexer.IndexMaterial(r.Context(), materialID, classID, entryID, string(raw), opt)
+		n, idxErr := h.Indexer.IndexMaterial(r.Context(), materialID, classID, entryID, string(raw), chunkOpt)
 		if idxErr != nil {
 			log.Printf("索引失败（材料已保留）material_id=%d: %v", materialID, idxErr)
 		} else {
@@ -281,8 +283,8 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Printf("upload ok: material_id=%d class_id=%d chunks=%d user=%s title=%q",
-		materialID, classID, chunkCount, user.Username, title)
+	log.Printf("upload ok: material_id=%d class_id=%d chunks=%d strategy=%s user=%s title=%q",
+		materialID, classID, chunkCount, chunkOpt.Strategy, user.Username, title)
 	httpx.JSON(w, http.StatusCreated, map[string]any{
 		"material_id": materialID,
 		"title":       title,

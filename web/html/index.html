@@ -7,8 +7,14 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+  <div class="accent-bar" aria-hidden="true"></div>
+
   <header class="topbar">
-    <div class="brand">CampusClaw<span>班级教研知识库</span></div>
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">CampusClaw</span>
+      <span class="brand-sub">班级教研知识库</span>
+    </div>
     <div class="who" id="who" hidden>
       <span id="who-text"></span>
       <button id="logout" class="link" type="button">退出</button>
@@ -16,21 +22,25 @@
   </header>
 
   <main>
-    <!-- 未登录视图 -->
-    <section id="view-login" class="card" hidden>
+    <!-- 未登录 -->
+    <section id="view-login" class="card card-narrow" hidden>
       <h1>登录</h1>
       <p class="sub">教师与学生均可登录。未登录访问受保护接口会返回 401。</p>
       <form id="login-form" autocomplete="on">
-        <label for="username">用户名</label>
-        <input id="username" name="username" type="text" autocomplete="username" required autofocus>
-        <label for="password">密码</label>
-        <input id="password" name="password" type="password" autocomplete="current-password" required>
-        <button type="submit">登录</button>
+        <div class="field">
+          <label class="field-label" for="username">用户名</label>
+          <input id="username" name="username" type="text" autocomplete="username" required autofocus>
+        </div>
+        <div class="field">
+          <label class="field-label" for="password">密码</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn-primary">登录</button>
       </form>
       <p class="hint">预置账号：<code>teacher_a</code>（A 班教师）、<code>student_a1</code>（A 班学生）、<code>student_b1</code>（B 班学生）</p>
     </section>
 
-    <!-- 已登录视图 -->
+    <!-- 已登录 -->
     <section id="view-app" hidden>
       <nav class="tabs" id="tabs">
         <button type="button" class="tab is-active" data-tab="materials">本班材料</button>
@@ -38,7 +48,7 @@
         <button type="button" class="tab" data-tab="ask">知识问答</button>
       </nav>
 
-      <!-- 材料 -->
+      <!-- ============ 材料 ============ -->
       <div id="tab-materials">
         <div class="card">
           <h1>本班材料</h1>
@@ -47,15 +57,89 @@
           <div id="upload-block" hidden>
             <h2>上传材料</h2>
             <form id="upload-form">
-              <input type="file" name="file" accept=".txt,.md" required>
-              <select id="upload-strategy" title="切分策略">
-                <option value="auto">自动分段（800 字 / 重叠 80）</option>
-                <option value="hierarchy">按标题层级分段</option>
-                <option value="custom">自定义分段</option>
-              </select>
-              <button type="submit">上传</button>
+              <div class="field">
+                <label class="field-label" for="upload-file">选择文件</label>
+                <input id="upload-file" type="file" name="file" accept=".txt,.md" required>
+                <p class="field-hint">仅接受 <code>.txt</code> / <code>.md</code>，单文件不超过 5MB。上传后解析写入知识库，并自动切分、嵌入、写入向量库。</p>
+              </div>
+
+              <div class="strategy-group">
+                <p class="field-label">分段策略</p>
+
+                <label class="strategy-card" data-strategy="auto">
+                  <input type="radio" name="chunk_strategy" value="auto" checked>
+                  <span class="strategy-dot" aria-hidden="true"></span>
+                  <span class="strategy-body">
+                    <span class="strategy-title">自动分段</span>
+                    <span class="strategy-desc">优先在空行、换行、句号处断开。最大长度 800 字，重叠 80 字（10%），使用服务器默认值。</span>
+                  </span>
+                </label>
+
+                <label class="strategy-card" data-strategy="custom">
+                  <input type="radio" name="chunk_strategy" value="custom">
+                  <span class="strategy-dot" aria-hidden="true"></span>
+                  <span class="strategy-body">
+                    <span class="strategy-title">自定义</span>
+                    <span class="strategy-desc">自己指定分段标识符、最大长度、重叠比例，以及入库前的文本清洗。</span>
+                  </span>
+                </label>
+                <div class="strategy-fields" data-fields="custom" hidden>
+                  <div class="field">
+                    <label class="field-label" for="custom-separator">分段标识符</label>
+                    <select id="custom-separator">
+                      <option value="&#10;">换行</option>
+                      <option value="&#10;&#10;">空行</option>
+                      <option value="。">句号</option>
+                      <option value="；">分号</option>
+                    </select>
+                  </div>
+                  <div class="field-row">
+                    <div class="field">
+                      <label class="field-label" for="custom-max">分段最大长度</label>
+                      <input id="custom-max" type="number" min="100" max="2000" step="10" value="800">
+                    </div>
+                    <div class="field">
+                      <label class="field-label" for="custom-overlap">分段重叠度%</label>
+                      <input id="custom-overlap" type="number" min="0" max="50" step="1" value="10">
+                    </div>
+                  </div>
+                  <div class="sub-group">
+                    <p class="sub-group-title">文本预处理规则</p>
+                    <label class="check">
+                      <input type="checkbox" id="custom-collapse">
+                      <span>替换掉连续的空格、换行符和制表符</span>
+                    </label>
+                    <label class="check">
+                      <input type="checkbox" id="custom-removeurls">
+                      <span>删除所有 URL 和电子邮箱地址</span>
+                    </label>
+                  </div>
+                </div>
+
+                <label class="strategy-card" data-strategy="hierarchy">
+                  <input type="radio" name="chunk_strategy" value="hierarchy">
+                  <span class="strategy-dot" aria-hidden="true"></span>
+                  <span class="strategy-body">
+                    <span class="strategy-title">按层级分段<span class="badge-recommend">推荐</span></span>
+                    <span class="strategy-desc">按 Markdown 标题（#、##、###）把文档分成带标题的章节。某一章超过最大长度时，再按重叠比例切开。适合讲义和课程资料。</span>
+                  </span>
+                </label>
+                <div class="strategy-fields" data-fields="hierarchy" hidden>
+                  <div class="field-row">
+                    <div class="field">
+                      <label class="field-label" for="hierarchy-max">分段最大长度</label>
+                      <input id="hierarchy-max" type="number" min="100" max="2000" step="10" value="800">
+                    </div>
+                    <div class="field">
+                      <label class="field-label" for="hierarchy-overlap">分段重叠度%</label>
+                      <input id="hierarchy-overlap" type="number" min="0" max="50" step="1" value="10">
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" class="btn-primary">上传并入库</button>
             </form>
-            <p class="hint">仅接受 <code>.txt</code> / <code>.md</code>；上传后解析写入知识库，并自动切分、嵌入、写入向量库。</p>
           </div>
           <p class="hint" id="readonly-note" hidden>学生账号为只读：页面不提供上传入口，服务端也会拒绝上传请求（403）。学生可检索与提问本班材料。</p>
         </div>
@@ -79,23 +163,31 @@
         </div>
       </div>
 
-      <!-- 检索 -->
+      <!-- ============ 检索 ============ -->
       <div id="tab-search" hidden>
         <div class="card">
           <h1>知识检索</h1>
           <p class="sub">以自然语言在本班材料中定位相关切片，每条结果都可回溯到材料、切片序号与字符区间。</p>
           <form id="search-form">
-            <label for="search-q">问题</label>
-            <input id="search-q" type="text" placeholder="例如：课间追逐打闹可以吗？" autocomplete="off">
-            <label for="search-mode">检索模式</label>
-            <select id="search-mode">
-              <option value="hybrid">混合（默认，RRF 融合）</option>
-              <option value="vector">仅向量（语义相近）</option>
-              <option value="keyword">仅关键字（原词命中）</option>
-            </select>
-            <button type="submit">检索</button>
+            <div class="field">
+              <label class="field-label" for="search-q">问题</label>
+              <input id="search-q" type="text" placeholder="例如：课间追逐打闹可以吗？" autocomplete="off">
+            </div>
+            <div class="field">
+              <label class="field-label" for="search-mode">检索模式</label>
+              <select id="search-mode">
+                <option value="hybrid">混合（默认，RRF 融合）</option>
+                <option value="vector">仅向量（语义相近）</option>
+                <option value="keyword">仅关键字（原词命中）</option>
+              </select>
+            </div>
+            <button type="submit" class="btn-primary">检索</button>
           </form>
-          <p class="hint">点击示例：<a href="#" class="example" data-q="课间追逐打闹可以吗？">课间追逐打闹可以吗？</a> · <a href="#" class="example" data-q="磁铁能吸木块吗？">磁铁能吸木块吗？</a> · <a href="#" class="example" data-q="明天的天气怎么样？">明天的天气怎么样？</a></p>
+          <p class="hint">试一试：
+            <a href="#" class="example" data-q="课间追逐打闹可以吗？">课间追逐打闹可以吗？</a>
+            <a href="#" class="example" data-q="着火了要怎么撤离？">着火了要怎么撤离？</a>
+            <a href="#" class="example" data-q="明天的天气怎么样？">明天的天气怎么样？</a>
+          </p>
         </div>
         <div class="card" id="search-result-card" hidden>
           <h2 id="search-result-title">检索结果</h2>
@@ -105,15 +197,17 @@
         </div>
       </div>
 
-      <!-- 问答 -->
+      <!-- ============ 问答 ============ -->
       <div id="tab-ask" hidden>
         <div class="card">
           <h1>知识问答</h1>
           <p class="sub">先在本班做混合检索，取前 4 条切片；有依据才调用生成模型，并在回答中标注出处。没有命中时不调用模型，直接说明资料里没有。</p>
           <form id="ask-form">
-            <label for="ask-q">提问</label>
-            <input id="ask-q" type="text" placeholder="例如：课间追逐打闹可以吗？" autocomplete="off">
-            <button type="submit">检索并回答</button>
+            <div class="field">
+              <label class="field-label" for="ask-q">提问</label>
+              <input id="ask-q" type="text" placeholder="例如：课间追逐打闹可以吗？" autocomplete="off">
+            </div>
+            <button type="submit" class="btn-primary">检索并回答</button>
           </form>
         </div>
         <div class="card" id="ask-result-card" hidden>

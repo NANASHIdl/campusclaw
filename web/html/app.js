@@ -317,6 +317,48 @@ async function runAsk() {
   (body.citations || []).forEach((c, i) => box.appendChild(hitCard(c, i)));
 }
 
+// --- 分段策略卡片 -----------------------------------------------------------
+
+function selectedStrategy() {
+  const checked = document.querySelector('input[name=chunk_strategy]:checked');
+  return checked ? checked.value : 'auto';
+}
+
+function syncStrategyUI() {
+  const current = selectedStrategy();
+  for (const card of document.querySelectorAll('.strategy-card')) {
+    card.classList.toggle('is-active', card.dataset.strategy === current);
+  }
+  for (const box of document.querySelectorAll('.strategy-fields')) {
+    box.hidden = box.dataset.fields !== current;
+  }
+}
+
+function initStrategyCards() {
+  for (const input of document.querySelectorAll('input[name=chunk_strategy]')) {
+    input.addEventListener('change', syncStrategyUI);
+  }
+  syncStrategyUI();
+}
+
+// 把表单里的分段参数按当前策略装进 FormData。
+// auto 策略不提交任何参数——服务端会忽略它们。
+function appendChunkParams(data) {
+  const strategy = selectedStrategy();
+  data.append('chunk_strategy', strategy);
+
+  if (strategy === 'custom') {
+    data.append('separator', el('custom-separator').value);
+    data.append('max_chars', el('custom-max').value);
+    data.append('overlap_percent', el('custom-overlap').value);
+    if (el('custom-collapse').checked) data.append('collapse_whitespace', '1');
+    if (el('custom-removeurls').checked) data.append('remove_urls', '1');
+  } else if (strategy === 'hierarchy') {
+    data.append('max_chars', el('hierarchy-max').value);
+    data.append('overlap_percent', el('hierarchy-overlap').value);
+  }
+}
+
 // --- 启动 -------------------------------------------------------------------
 
 el('tabs').addEventListener('click', (e) => {
@@ -351,28 +393,61 @@ el('logout').addEventListener('click', async () => {
 el('upload-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
+  const file = el('upload-file').files[0];
+  if (!file) {
+    showMessage('请选择一个 .txt 或 .md 文件。', 'error');
+    return;
+  }
+
+  const strategy = selectedStrategy();
   const data = new FormData();
-  const file = form.querySelector('input[type=file]').files[0];
-  if (!file) return;
   data.append('file', file);
-  data.append('chunk_strategy', el('upload-strategy').value);
+  appendChunkParams(data);
   // 注意：不提交 class 字段——班级由服务端从会话读取。
-  const res = await fetch('/api/materials/upload', {
-    method: 'POST',
-    body: data,
-    credentials: 'same-origin',
-  });
+
+  const submit = form.querySelector('button[type=submit]');
+  submit.disabled = true;
+  submit.textContent = '上传中…';
+  showMessage('');
+
+  let res;
+  try {
+    res = await fetch('/api/materials/upload', {
+      method: 'POST',
+      body: data,
+      credentials: 'same-origin',
+    });
+  } catch (err) {
+    submit.disabled = false;
+    submit.textContent = '上传并入库';
+    showMessage('网络错误，上传未完成。', 'error');
+    return;
+  }
+  submit.disabled = false;
+  submit.textContent = '上传并入库';
+
   if (res.status === 201) {
     const body = await res.json().catch(() => null);
     form.reset();
-    showMessage(`上传成功，已建立 ${body ? body.chunk_count : 0} 条切片与向量。`, 'info');
+    syncStrategyUI();
+    const names = { auto: '自动分段', custom: '自定义', hierarchy: '按层级分段' };
+    const n = body ? body.chunk_count : 0;
+    showMessage(`上传成功，按「${names[strategy]}」建立 ${n} 条切片并写入向量库。`, 'info');
     await loadMaterials();
     return;
   }
+
   let msg = '上传失败。';
-  if (res.status === 403) msg = '上传被拒绝（403）：仅教师可上传。';
-  else if (res.status === 400) msg = '上传失败（400）：仅接受 .txt / .md，且不能为空。';
-  else if (res.status === 401) msg = '会话已失效，请重新登录。';
+  if (res.status === 403) {
+    msg = '上传被拒绝（403）：仅教师可上传。';
+  } else if (res.status === 400) {
+    const body = await res.json().catch(() => null);
+    msg = (body && body.error)
+      ? `上传失败（400）：${body.error}`
+      : '上传失败（400）：仅接受 .txt / .md，且不能为空。';
+  } else if (res.status === 401) {
+    msg = '会话已失效，请重新登录。';
+  }
   showMessage(msg, 'error');
 });
 
@@ -405,4 +480,5 @@ async function bootstrap() {
   }
 }
 
+initStrategyCards();
 bootstrap();
