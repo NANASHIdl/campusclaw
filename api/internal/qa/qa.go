@@ -214,7 +214,8 @@ func sentences(text string) []string {
 	return out
 }
 
-// overlap 用字符 bigram 的 Jaccard 近似衡量问句与句子的相关度。
+// overlap 衡量问句与句子的字面重合度：返回问句的字符 bigram 中被句子覆盖的比例。
+// 取值 0–1；越大表示这一句越可能回答了问句。
 func overlap(question, sentence string) float64 {
 	q := bigrams(question)
 	s := bigrams(sentence)

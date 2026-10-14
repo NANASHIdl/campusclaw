@@ -90,7 +90,8 @@ func Load() (*Config, error) {
 
 	cfg.QdrantURL = getenv("QDRANT_URL", "http://qdrant:6333")
 	cfg.QdrantCollection = getenv("QDRANT_COLLECTION", "campusclaw_chunks")
-	cfg.VectorDim = int(getenvInt64("VECTOR_DIM", 2048))
+	// 向量维度：VECTOR_DIM 优先，其次兼容嵌入网关惯用的 EMBEDDING_DIM。
+	cfg.VectorDim = int(getenvInt64("VECTOR_DIM", getenvInt64("EMBEDDING_DIM", 2048)))
 
 	cfg.EmbeddingBaseURL = getenv("EMBEDDING_BASE_URL", "")
 	cfg.EmbeddingAPIKey = getenv("EMBEDDING_API_KEY", "")
