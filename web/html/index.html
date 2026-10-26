@@ -17,6 +17,7 @@
     </div>
     <div class="who" id="who" hidden>
       <span id="who-text"></span>
+      <a class="link" href="/swagger/index.html" target="_blank" rel="noopener">接口文档</a>
       <button id="logout" class="link" type="button">退出</button>
     </div>
   </header>
@@ -25,7 +26,7 @@
     <!-- 未登录 -->
     <section id="view-login" class="card card-narrow" hidden>
       <h1>登录</h1>
-      <p class="sub">教师与学生均可登录。未登录访问受保护接口会返回 401。</p>
+      <p class="sub">教师与学生均可登录。登录后以 Bearer 令牌访问接口，与接口文档一致。</p>
       <form id="login-form" autocomplete="on">
         <div class="field">
           <label class="field-label" for="username">用户名</label>
@@ -43,38 +44,141 @@
     <!-- 已登录 -->
     <section id="view-app" hidden>
       <nav class="tabs" id="tabs">
-        <button type="button" class="tab is-active" data-tab="materials">本班材料</button>
+        <button type="button" class="tab is-active" data-tab="chat">解题对话</button>
+        <button type="button" class="tab" data-tab="agents">智能体</button>
+        <button type="button" class="tab" data-tab="skills">技能</button>
+        <button type="button" class="tab" data-tab="materials">本班材料</button>
         <button type="button" class="tab" data-tab="search">知识检索</button>
-        <button type="button" class="tab" data-tab="ask">知识问答</button>
       </nav>
+
+      <!-- ============ 解题对话 ============ -->
+      <div id="tab-chat">
+        <div class="card">
+          <h1>解题对话</h1>
+          <p class="sub">选定一个智能体后连续追问。助手按该智能体的提示词作答，只在其绑定的材料里检索，技能至多命中一个；回答以 SSE 逐段到达，引用随第一个事件先到。</p>
+          <div class="field-row">
+            <div class="field">
+              <label class="field-label" for="conv-agent">新建会话：选择智能体</label>
+              <select id="conv-agent"></select>
+            </div>
+            <div class="field">
+              <label class="field-label">&nbsp;</label>
+              <button type="button" id="conv-new" class="btn-primary">新建会话</button>
+            </div>
+          </div>
+          <div class="field">
+            <label class="field-label" for="conv-list">我的会话</label>
+            <select id="conv-list"></select>
+          </div>
+        </div>
+
+        <div class="card" id="conv-card" hidden>
+          <h2 id="conv-title">会话</h2>
+          <div id="conv-messages" class="messages"></div>
+          <form id="conv-form" class="ask-row">
+            <input id="conv-input" type="text" placeholder="继续追问，例如：那第二步该检查什么？" autocomplete="off">
+            <button type="submit" class="btn-primary">发送</button>
+          </form>
+          <p class="hint" id="conv-meta"></p>
+        </div>
+      </div>
+
+      <!-- ============ 智能体 ============ -->
+      <div id="tab-agents">
+        <div class="card">
+          <h1>智能体</h1>
+          <p class="sub">智能体把角色提示词与「能用的技能」「能查的材料」绑在一起。绑定是关联表而非快照：改了绑定，下一次提问立刻按新关系作答。</p>
+          <table id="agents-table">
+            <thead><tr><th>ID</th><th>名称</th><th>提示词</th><th>技能</th><th>材料</th><th>状态</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <p class="empty" id="agents-empty" hidden>本班暂无智能体。</p>
+        </div>
+
+        <div class="card" id="agent-form-card" hidden>
+          <h2 id="agent-form-title">新建智能体</h2>
+          <form id="agent-form">
+            <input type="hidden" id="agent-id">
+            <div class="field">
+              <label class="field-label" for="agent-name">名称</label>
+              <input id="agent-name" type="text" maxlength="64" placeholder="例如：解题引导助手">
+            </div>
+            <div class="field">
+              <label class="field-label" for="agent-prompt">角色提示词</label>
+              <textarea id="agent-prompt" rows="5" maxlength="2000" placeholder="留空则回退到内置默认角色设定"></textarea>
+              <p class="field-hint">不超过 2000 字；留空不报错，作答时回退默认角色。</p>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label class="field-label" for="agent-skills">绑定技能</label>
+                <select id="agent-skills" multiple size="5"></select>
+              </div>
+              <div class="field">
+                <label class="field-label" for="agent-materials">绑定材料</label>
+                <select id="agent-materials" multiple size="5"></select>
+              </div>
+            </div>
+            <label class="check"><input type="checkbox" id="agent-enabled" checked><span>启用（停用后学生列不到、也选不了；已有会话不受影响）</span></label>
+            <div class="btn-row">
+              <button type="submit" class="btn-primary">保存</button>
+              <button type="button" id="agent-cancel" class="btn-ghost">取消</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- ============ 技能 ============ -->
+      <div id="tab-skills">
+        <div class="card">
+          <h1>技能</h1>
+          <p class="sub">技能以单一文本文件定义：空行以上写名称、适用条件、资料、工具、启用，空行以下写引导规程。服务端按适用条件切词计分，至多命中一个。</p>
+          <table id="skills-table">
+            <thead><tr><th>ID</th><th>名称</th><th>适用条件</th><th>资料</th><th>状态</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <p class="empty" id="skills-empty" hidden>本班暂无技能。</p>
+        </div>
+
+        <div class="card" id="skill-form-card" hidden>
+          <h2 id="skill-form-title">新建技能</h2>
+          <form id="skill-form">
+            <input type="hidden" id="skill-id">
+            <div class="field">
+              <label class="field-label" for="skill-source">技能文件</label>
+              <textarea id="skill-source" rows="12" spellcheck="false"></textarea>
+              <p class="field-hint">名称 ≤32、适用条件 ≤120、说明 ≤2000、整份 ≤8000；工具只能写 <code>knowledge_search</code>。</p>
+            </div>
+            <div class="btn-row">
+              <button type="submit" class="btn-primary">保存</button>
+              <button type="button" id="skill-cancel" class="btn-ghost">取消</button>
+            </div>
+          </form>
+        </div>
+      </div>
 
       <!-- ============ 材料 ============ -->
       <div id="tab-materials">
         <div class="card">
           <h1>本班材料</h1>
           <p class="sub" id="scope-note"></p>
-
           <div id="upload-block" hidden>
             <h2>上传材料</h2>
             <form id="upload-form">
               <div class="field">
                 <label class="field-label" for="upload-file">选择文件</label>
                 <input id="upload-file" type="file" name="file" accept=".txt,.md" required>
-                <p class="field-hint">仅接受 <code>.txt</code> / <code>.md</code>，单文件不超过 5MB。上传后解析写入知识库，并自动切分、嵌入、写入向量库。</p>
+                <p class="field-hint">仅接受 <code>.txt</code> / <code>.md</code>，单文件不超过 5MB。上传后自动切分、嵌入、写入向量库。</p>
               </div>
-
               <div class="strategy-group">
                 <p class="field-label">分段策略</p>
-
                 <label class="strategy-card" data-strategy="auto">
                   <input type="radio" name="chunk_strategy" value="auto" checked>
                   <span class="strategy-dot" aria-hidden="true"></span>
                   <span class="strategy-body">
                     <span class="strategy-title">自动分段</span>
-                    <span class="strategy-desc">优先在空行、换行、句号处断开。最大长度 800 字，重叠 80 字（10%），使用服务器默认值。</span>
+                    <span class="strategy-desc">优先在空行、换行、句号处断开。最大长度 800 字，重叠 80 字（10%）。</span>
                   </span>
                 </label>
-
                 <label class="strategy-card" data-strategy="custom">
                   <input type="radio" name="chunk_strategy" value="custom">
                   <span class="strategy-dot" aria-hidden="true"></span>
@@ -105,23 +209,16 @@
                   </div>
                   <div class="sub-group">
                     <p class="sub-group-title">文本预处理规则</p>
-                    <label class="check">
-                      <input type="checkbox" id="custom-collapse">
-                      <span>替换掉连续的空格、换行符和制表符</span>
-                    </label>
-                    <label class="check">
-                      <input type="checkbox" id="custom-removeurls">
-                      <span>删除所有 URL 和电子邮箱地址</span>
-                    </label>
+                    <label class="check"><input type="checkbox" id="custom-collapse"><span>替换掉连续的空格、换行符和制表符</span></label>
+                    <label class="check"><input type="checkbox" id="custom-removeurls"><span>删除所有 URL 和电子邮箱地址</span></label>
                   </div>
                 </div>
-
                 <label class="strategy-card" data-strategy="hierarchy">
                   <input type="radio" name="chunk_strategy" value="hierarchy">
                   <span class="strategy-dot" aria-hidden="true"></span>
                   <span class="strategy-body">
                     <span class="strategy-title">按层级分段<span class="badge-recommend">推荐</span></span>
-                    <span class="strategy-desc">按 Markdown 标题（#、##、###）把文档分成带标题的章节。某一章超过最大长度时，再按重叠比例切开。适合讲义和课程资料。</span>
+                    <span class="strategy-desc">按 Markdown 标题（#、##、###）分章，某章过长时再按重叠比例切开。</span>
                   </span>
                 </label>
                 <div class="strategy-fields" data-fields="hierarchy" hidden>
@@ -137,19 +234,16 @@
                   </div>
                 </div>
               </div>
-
               <button type="submit" class="btn-primary">上传并入库</button>
             </form>
           </div>
-          <p class="hint" id="readonly-note" hidden>学生账号为只读：页面不提供上传入口，服务端也会拒绝上传请求（403）。学生可检索与提问本班材料。</p>
+          <p class="hint" id="readonly-note" hidden>学生账号为只读：页面不提供上传入口，服务端也会拒绝上传请求（403）。</p>
         </div>
 
         <div class="card">
           <h2 id="list-title">材料列表</h2>
           <table id="materials">
-            <thead>
-              <tr><th>ID</th><th>标题</th><th>上传者</th><th>时间</th><th></th></tr>
-            </thead>
+            <thead><tr><th>ID</th><th>标题</th><th>上传者</th><th>时间</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
           <p class="empty" id="empty" hidden>本班暂无材料。</p>
@@ -157,14 +251,14 @@
 
         <div class="card" id="vectors-card" hidden>
           <h2 id="vectors-title">切片与向量</h2>
-          <p class="sub">切片正文存在 MySQL，向量存在 Qdrant。两边靠同一个编号关联：<code>knowledge_chunks.id</code> = 向量主键 = <code>payload.chunk_id</code>。检索时向量库先返回主键，再拿它回 MySQL 取正文。</p>
+          <p class="sub">切片正文存在 MySQL，向量存在 Qdrant。两边靠同一个编号关联：<code>knowledge_chunks.id</code> = 向量主键 = <code>payload.chunk_id</code>。</p>
           <p class="hint" id="vectors-meta"></p>
           <div id="vectors-body"></div>
         </div>
       </div>
 
       <!-- ============ 检索 ============ -->
-      <div id="tab-search" hidden>
+      <div id="tab-search">
         <div class="card">
           <h1>知识检索</h1>
           <p class="sub">以自然语言在本班材料中定位相关切片，每条结果都可回溯到材料、切片序号与字符区间。</p>
@@ -186,7 +280,6 @@
           <p class="hint">试一试：
             <a href="#" class="example" data-q="课间追逐打闹可以吗？">课间追逐打闹可以吗？</a>
             <a href="#" class="example" data-q="着火了要怎么撤离？">着火了要怎么撤离？</a>
-            <a href="#" class="example" data-q="明天的天气怎么样？">明天的天气怎么样？</a>
           </p>
         </div>
         <div class="card" id="search-result-card" hidden>
@@ -194,27 +287,6 @@
           <p class="hint" id="search-note"></p>
           <div id="search-vector"></div>
           <div id="search-hits"></div>
-        </div>
-      </div>
-
-      <!-- ============ 问答 ============ -->
-      <div id="tab-ask" hidden>
-        <div class="card">
-          <h1>知识问答</h1>
-          <p class="sub">先在本班做混合检索，取前 4 条切片；有依据才调用生成模型，并在回答中标注出处。没有命中时不调用模型，直接说明资料里没有。</p>
-          <form id="ask-form">
-            <div class="field">
-              <label class="field-label" for="ask-q">提问</label>
-              <input id="ask-q" type="text" placeholder="例如：课间追逐打闹可以吗？" autocomplete="off">
-            </div>
-            <button type="submit" class="btn-primary">检索并回答</button>
-          </form>
-        </div>
-        <div class="card" id="ask-result-card" hidden>
-          <h2>依据回答</h2>
-          <p id="ask-answer"></p>
-          <p class="hint" id="ask-status"></p>
-          <div id="ask-citations"></div>
         </div>
       </div>
     </section>

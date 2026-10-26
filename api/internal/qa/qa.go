@@ -85,6 +85,7 @@ type chatMessage struct {
 type chatRequest struct {
 	Model    string        `json:"model"`
 	Messages []chatMessage `json:"messages"`
+	Stream   bool          `json:"stream,omitempty"`
 }
 
 type chatResponse struct {
@@ -97,28 +98,7 @@ type chatResponse struct {
 }
 
 func (g *gatewayProvider) Answer(ctx context.Context, question string, contexts []Context, history []Message) (string, error) {
-	messages := []chatMessage{{
-		Role:    "system",
-		Content: "你是教研助手。只能依据给出的材料片段作答，回答要简短，并在句末用 [1]、[2] 标注出处编号。材料中没有依据时回答「" + NoEvidenceAnswer + "」。",
-	}}
-	// 历史只保留 user / assistant，客户端注入的 system 消息被丢弃。
-	for _, m := range history {
-		if m.Role != "user" && m.Role != "assistant" {
-			continue
-		}
-		if strings.TrimSpace(m.Content) == "" {
-			continue
-		}
-		messages = append(messages, chatMessage{Role: m.Role, Content: m.Content})
-	}
-
-	var b strings.Builder
-	b.WriteString("材料片段：\n")
-	for i, c := range contexts {
-		fmt.Fprintf(&b, "[%d] 《%s》第 %d 段：%s\n", i+1, c.Title, c.Index+1, c.Text)
-	}
-	fmt.Fprintf(&b, "\n问题：%s", question)
-	messages = append(messages, chatMessage{Role: "user", Content: b.String()})
+	messages := g.buildMessages(question, contexts, history)
 
 	body, err := json.Marshal(chatRequest{Model: g.model, Messages: messages})
 	if err != nil {
@@ -157,6 +137,35 @@ func (g *gatewayProvider) Answer(ctx context.Context, question string, contexts 
 		return "", errors.New("对话网关未返回任何回答")
 	}
 	return strings.TrimSpace(parsed.Choices[0].Message.Content), nil
+}
+
+// buildMessages 组装系统消息与历史，供普通与流式两条路径共用。
+//
+// 编号资料放在用户消息里，系统消息只放角色、技能与边界句。
+func (g *gatewayProvider) buildMessages(question string, contexts []Context, history []Message) []chatMessage {
+	messages := []chatMessage{{
+		Role:    "system",
+		Content: "你是教研助手。只能依据给出的材料片段作答，回答要简短，并在句末用 [1]、[2] 标注出处编号。材料中没有依据时回答「" + NoEvidenceAnswer + "」。",
+	}}
+	// 历史只保留 user / assistant，客户端注入的 system 消息被丢弃。
+	for _, m := range history {
+		if m.Role != "user" && m.Role != "assistant" {
+			continue
+		}
+		if strings.TrimSpace(m.Content) == "" {
+			continue
+		}
+		messages = append(messages, chatMessage{Role: m.Role, Content: m.Content})
+	}
+
+	var b strings.Builder
+	b.WriteString("材料片段：\n")
+	for i, c := range contexts {
+		fmt.Fprintf(&b, "[%d] 《%s》第 %d 段：%s\n", i+1, c.Title, c.Index+1, c.Text)
+	}
+	fmt.Fprintf(&b, "\n问题：%s", question)
+	messages = append(messages, chatMessage{Role: "user", Content: b.String()})
+	return messages
 }
 
 // --- 本地抽取式回退 ---------------------------------------------------------

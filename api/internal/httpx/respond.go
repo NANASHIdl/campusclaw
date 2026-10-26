@@ -23,6 +23,11 @@ type errorBody struct {
 	Error string `json:"error"`
 }
 
+// ErrorBody 是对外错误响应的形状，供 OpenAPI 文档引用。
+type ErrorBody struct {
+	Error string `json:"error"`
+}
+
 // JSON 写出 JSON 响应。
 func JSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

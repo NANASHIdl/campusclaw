@@ -102,8 +102,33 @@ type rawHit struct {
 	ScoreVector   float64
 }
 
+// Scope 限定检索范围。
+//
+// 该结构只由服务端内部构造（智能体绑定的材料），不从客户端读取。
+//
+// 两种「空」必须区分开：
+//   - 零值 Scope{}：不做材料限定，检索全班（/api/search 的语义）；
+//   - Scoped 为真且 MaterialIDs 为空：调用方确实限定了范围，但范围内一份材料也没有，
+//     此时必须返回空结果。若混同于零值，空绑定的智能体会检索到全班材料，
+//     越出「只在绑定材料内检索」的边界。
+type Scope struct {
+	MaterialIDs []int64
+	Scoped      bool
+}
+
+// Empty 判断本次范围是否明确为空（限定范围内没有任何材料）。
+func (s Scope) Empty() bool {
+	return s.Scoped && len(s.MaterialIDs) == 0
+}
+
+
 // Search 执行检索。classID 必须来自会话。
 func (s *Service) Search(ctx context.Context, classID int64, query, mode string) (Result, error) {
+	return s.SearchScoped(ctx, classID, query, mode, Scope{}, s.Limit)
+}
+
+// SearchScoped 在指定范围内执行检索。classID 必须来自会话。
+func (s *Service) SearchScoped(ctx context.Context, classID int64, query, mode string, scope Scope, limit int) (Result, error) {
 	query = strings.TrimSpace(query)
 	if utf8.RuneCountInString(query) < 2 {
 		return Result{}, ErrQueryTooShort
@@ -116,7 +141,14 @@ func (s *Service) Search(ctx context.Context, classID int64, query, mode string)
 		return Result{}, ErrBadMode
 	}
 
-	limit := s.Limit
+	if limit <= 0 {
+		limit = s.Limit
+	}
+
+	// 限定范围内没有任何材料：直接给空结果，不查库、不调嵌入。
+	if scope.Empty() {
+		return Result{Status: "ok", Mode: mode, Hits: []Hit{}}, nil
+	}
 
 	var (
 		kwHits  []rawHit
@@ -135,7 +167,7 @@ func (s *Service) Search(ctx context.Context, classID int64, query, mode string)
 		}
 		qvec = vecs[0]
 
-		vecHits, err = s.vectorSearch(ctx, classID, qvec, limit)
+		vecHits, err = s.vectorSearch(ctx, classID, qvec, scope, limit)
 		if err != nil {
 			if errors.Is(err, vector.ErrUnavailable) {
 				return Result{}, ErrVectorUnavailable
@@ -146,7 +178,7 @@ func (s *Service) Search(ctx context.Context, classID int64, query, mode string)
 
 	if mode == ModeKeyword || mode == ModeHybrid {
 		var err error
-		kwHits, err = s.keywordSearch(ctx, classID, query, limit)
+		kwHits, err = s.keywordSearch(ctx, classID, query, scope, limit)
 		if err != nil {
 			return Result{}, err
 		}
@@ -173,18 +205,22 @@ func (s *Service) Search(ctx context.Context, classID int64, query, mode string)
 }
 
 // keywordSearch 仅查询 MySQL 全文索引；不调用嵌入，也不访问向量库。
-func (s *Service) keywordSearch(ctx context.Context, classID int64, query string, limit int) ([]rawHit, error) {
+func (s *Service) keywordSearch(ctx context.Context, classID int64, query string, scope Scope, limit int) ([]rawHit, error) {
+	matClause, matArgs := materialClause(classID, scope)
+	args := append([]any{query}, matArgs...)
+	args = append(args, query, limit)
+
 	rows, err := s.DB.QueryContext(ctx,
 		`SELECT c.id, c.material_id, m.title, c.chunk_index, c.start_offset, c.end_offset, c.chunk_text,
 		        MATCH(c.chunk_text) AGAINST (? IN NATURAL LANGUAGE MODE) AS score
 		   FROM knowledge_chunks c
 		   JOIN materials m ON m.id = c.material_id
-		  WHERE c.class_id = ?
+		  WHERE c.class_id = ?`+matClause+`
 		    AND c.index_status = 'ready'
 		    AND MATCH(c.chunk_text) AGAINST (? IN NATURAL LANGUAGE MODE) > 0
 		  ORDER BY score DESC, c.id ASC
 		  LIMIT ?`,
-		query, classID, query, limit,
+		args...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("关键字检索失败: %w", err)
@@ -204,12 +240,12 @@ func (s *Service) keywordSearch(ctx context.Context, classID int64, query string
 }
 
 // vectorSearch 走向量库，阈值过滤后回 MySQL 取正文（再次带班级条件）。
-func (s *Service) vectorSearch(ctx context.Context, classID int64, qvec []float32, limit int) ([]rawHit, error) {
+func (s *Service) vectorSearch(ctx context.Context, classID int64, qvec []float32, scope Scope, limit int) ([]rawHit, error) {
 	if s.Vector == nil {
 		return nil, ErrVectorUnavailable
 	}
 	// 多取候选，阈值过滤后再截断。
-	hits, err := s.Vector.Search(ctx, qvec, classID, limit*4)
+	hits, err := s.Vector.SearchScoped(ctx, qvec, classID, scope.MaterialIDs, limit*4)
 	if err != nil {
 		return nil, err
 	}
@@ -236,17 +272,18 @@ func (s *Service) vectorSearch(ctx context.Context, classID int64, qvec []float3
 	for _, k := range kept {
 		ids = append(ids, int64(k.id))
 	}
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	inClause := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
 
-	// 回表：班级条件必须再次出现，即便向量库侧漏加过滤也不会越界。
-	args := append([]any{classID}, ids...)
+	// 回表：班级条件与材料范围都必须再次出现，即便向量库侧漏加过滤也不会越界。
+	matClause, matArgs := materialClause(classID, scope)
+	args := append(matArgs, ids...)
 	rows, err := s.DB.QueryContext(ctx,
 		`SELECT c.id, c.material_id, m.title, c.chunk_index, c.start_offset, c.end_offset, c.chunk_text
 		   FROM knowledge_chunks c
 		   JOIN materials m ON m.id = c.material_id
-		  WHERE c.class_id = ?
+		  WHERE c.class_id = ?`+matClause+`
 		    AND c.index_status = 'ready'
-		    AND c.id IN (`+placeholders+`)`,
+		    AND c.id IN (`+inClause+`)`,
 		args...,
 	)
 	if err != nil {
@@ -403,4 +440,22 @@ func Top(hits []Hit, n int) []Hit {
 		return hits
 	}
 	return hits[:n]
+}
+
+// materialClause 生成材料范围条件，返回附加 SQL 片段与对应的参数
+// （参数首位固定为 classID，调用方须按 SQL 中占位符顺序拼接）。
+func materialClause(classID int64, scope Scope) (string, []any) {
+	args := []any{classID}
+	if len(scope.MaterialIDs) == 0 {
+		return "", args
+	}
+	clause := " AND c.material_id IN (" + placeholdersOf(len(scope.MaterialIDs)) + ")"
+	for _, id := range scope.MaterialIDs {
+		args = append(args, id)
+	}
+	return clause, args
+}
+
+func placeholdersOf(n int) string {
+	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
 }

@@ -165,14 +165,33 @@ func (c *Client) DeleteByMaterial(ctx context.Context, materialID int64) error {
 //
 // 过滤条件必须包含 class_id：这是检索侧班级隔离的向量一侧。
 func (c *Client) Search(ctx context.Context, vec []float32, classID int64, limit int) ([]Hit, error) {
+	return c.SearchScoped(ctx, vec, classID, nil, limit)
+}
+
+// SearchScoped 在班级之外再叠加材料范围过滤（智能体只在自己绑定的材料里检索）。
+func (c *Client) SearchScoped(ctx context.Context, vec []float32, classID int64, materialIDs []int64, limit int) ([]Hit, error) {
 	if limit <= 0 {
 		limit = 10
 	}
+	must := []map[string]any{
+		{"key": "class_id", "match": map[string]any{"value": classID}},
+	}
+	if len(materialIDs) > 0 {
+		vals := make([]any, 0, len(materialIDs))
+		for _, id := range materialIDs {
+			vals = append(vals, id)
+		}
+		must = append(must, map[string]any{
+			"key":   "material_id",
+			"match": map[string]any{"any": vals},
+		})
+	}
+
 	payload := map[string]any{
 		"vector":       vec,
 		"limit":        limit,
 		"with_payload": true,
-		"filter":       matchFilter("class_id", classID),
+		"filter":       map[string]any{"must": must},
 	}
 	raw, err := c.do(ctx, http.MethodPost, "/collections/"+c.Collection+"/points/search", payload)
 	if err != nil {

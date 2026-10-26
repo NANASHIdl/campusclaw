@@ -51,6 +51,17 @@ type detailItem struct {
 }
 
 // List 处理 GET /api/materials：只返回会话班级的记录。
+//
+// @Summary      列出本班材料
+// @Description  只返回会话所属班级的材料，按创建时间倒序。
+// @Tags         materials
+// @Produce      json
+// @Security     bearerAuth
+// @Success      200 {object} map[string]interface{}
+// @Failure      401 {object} httpx.ErrorBody
+// @Failure      500 {object} httpx.ErrorBody
+// @Router       /api/materials [get]
+// @ID           MAT-001
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
@@ -96,6 +107,19 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 // Detail 处理 GET /api/materials/{id}：先取行再校验班级归属。
+//
+// @Summary      读取本班材料详情
+// @Description  跨班与不存在返回同一个 404。
+// @Tags         materials
+// @Produce      json
+// @Security     bearerAuth
+// @Param        id path int true "材料编号"
+// @Success      200 {object} materials.detailItem
+// @Failure      401 {object} httpx.ErrorBody
+// @Failure      404 {object} httpx.ErrorBody
+// @Failure      500 {object} httpx.ErrorBody
+// @Router       /api/materials/{id} [get]
+// @ID           MAT-002
 func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
@@ -134,6 +158,19 @@ func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
 
 // Download 处理 GET /api/materials/{id}/file。
 // 必须在读取文件字节之前完成认证（中间件已做）与班级归属校验。
+//
+// @Summary      下载本班材料原文
+// @Description  读取文件前完成认证与班级校验；跨班与不存在返回同一个 404。上传目录不作为静态资源暴露。
+// @Tags         materials
+// @Produce      application/octet-stream
+// @Security     bearerAuth
+// @Param        id path int true "材料编号"
+// @Success      200 {file} file "材料原文"
+// @Failure      401 {object} httpx.ErrorBody
+// @Failure      404 {object} httpx.ErrorBody
+// @Failure      500 {object} httpx.ErrorBody
+// @Router       /api/materials/{id}/file [get]
+// @ID           MAT-003
 func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
@@ -187,6 +224,27 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 }
 
 // Upload 处理 POST /api/materials/upload。
+//
+// @Summary      上传本班材料
+// @Description  仅教师，学生调用返回 403。仅接受 .txt / .md 且不超过大小上限；分段参数在落盘与写库之前校验，越界返回 400。入库后自动切分、嵌入并写入向量库。
+// @Tags         materials
+// @Accept       multipart/form-data
+// @Produce      json
+// @Security     bearerAuth
+// @Param        file              formData file   true  "材料文件（.txt / .md）"
+// @Param        chunk_strategy    formData string false "分段策略：auto / custom / hierarchy"
+// @Param        max_chars         formData int    false "分段最大长度（custom/hierarchy，100–2000）"
+// @Param        overlap_percent   formData int    false "分段重叠度百分比（0–50）"
+// @Param        separator         formData string false "分段标识符（custom）"
+// @Param        remove_urls       formData bool   false "删除 URL 与电子邮箱（custom）"
+// @Param        collapse_whitespace formData bool false "折叠连续空白（custom）"
+// @Success      201 {object} map[string]interface{}
+// @Failure      400 {object} httpx.ErrorBody
+// @Failure      401 {object} httpx.ErrorBody
+// @Failure      403 {object} httpx.ErrorBody
+// @Failure      500 {object} httpx.ErrorBody
+// @Router       /api/materials/upload [post]
+// @ID           MAT-004
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {

@@ -83,7 +83,7 @@ func Load() (*Config, error) {
 		MaxUploadBytes: getenvInt64("MAX_UPLOAD_BYTES", 5<<20),
 		LoginRateLimit: int(getenvInt64("LOGIN_RATE_LIMIT", 10)),
 	}
-	cfg.SessionTTL = time.Duration(getenvInt64("SESSION_TTL_MINUTES", 720)) * time.Minute
+	cfg.SessionTTL = time.Duration(getenvInt64("SESSION_TTL_SECONDS", 86400)) * time.Second
 	cfg.LoginRateWindow = time.Duration(getenvInt64("LOGIN_RATE_WINDOW_SECONDS", 60)) * time.Second
 
 	// 种子口令允许缺省（例如库已初始化时），但一旦提供就用于种子写入。

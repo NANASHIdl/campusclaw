@@ -22,3 +22,7 @@ data/
 # Python 缓存
 __pycache__/
 *.py[cod]
+
+# 接口测试的 HTML 报告与中间产物
+apitest/report/
+apitest/.cache/

@@ -54,6 +54,19 @@ func truthy(v string) bool {
 // Vectors 处理 GET /api/materials/{id}/vectors。
 //
 // 返回 MySQL 侧切片与向量库侧的对应关系：向量主键 = knowledge_chunks.id。
+//
+// @Summary      查看本班材料的向量记录
+// @Description  返回集合名、距离度量、维度，以及每条切片的向量、L2 范数与两库编号对应关系。跨班与不存在返回同一个 404。
+// @Tags         materials
+// @Produce      json
+// @Security     bearerAuth
+// @Param        id path int true "材料编号"
+// @Success      200 {object} map[string]interface{}
+// @Failure      401 {object} httpx.ErrorBody
+// @Failure      404 {object} httpx.ErrorBody
+// @Failure      500 {object} httpx.ErrorBody
+// @Router       /api/materials/{id}/vectors [get]
+// @ID           MAT-005
 func (h *Handler) Vectors(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
@@ -116,9 +129,36 @@ type reindexRequest struct {
 	Separator          string `json:"separator"`
 }
 
+// ReindexRequest 是重建索引的请求体，供 OpenAPI 文档引用。
+type ReindexRequest struct {
+	Strategy           string `json:"strategy"`
+	MaxChars           int    `json:"max_chars"`
+	OverlapPercent     int    `json:"overlap_percent"`
+	RemoveURLs         bool   `json:"remove_urls"`
+	CollapseWhitespace bool   `json:"collapse_whitespace"`
+	Separator          string `json:"separator"`
+}
+
 // Reindex 处理 POST /api/materials/{id}/reindex：按本次请求的策略重建切片与向量。
 //
 // 仅教师可用；班级仍取自会话。
+//
+// @Summary      重建本班某一材料的切片和向量
+// @Description  仅教师。按请求指定的策略先删旧切片与旧向量再写入新的；参数越界返回 400。跨班与不存在返回同一个 404。
+// @Tags         materials
+// @Accept       json
+// @Produce      json
+// @Security     bearerAuth
+// @Param        id   path int                       true "材料编号"
+// @Param        body body materials.ReindexRequest  true "切分参数"
+// @Success      200 {object} map[string]interface{}
+// @Failure      400 {object} httpx.ErrorBody
+// @Failure      401 {object} httpx.ErrorBody
+// @Failure      403 {object} httpx.ErrorBody
+// @Failure      404 {object} httpx.ErrorBody
+// @Failure      500 {object} httpx.ErrorBody
+// @Router       /api/materials/{id}/reindex [post]
+// @ID           MAT-006
 func (h *Handler) Reindex(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
@@ -152,7 +192,7 @@ func (h *Handler) Reindex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req reindexRequest
+	var req ReindexRequest
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}

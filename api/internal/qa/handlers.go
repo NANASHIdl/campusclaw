@@ -17,13 +17,28 @@ type Handler struct {
 
 func NewHandler(s *Service) *Handler { return &Handler{Service: s} }
 
-type askRequest struct {
+// AskRequest 是问答请求体，供 OpenAPI 文档引用。
+type AskRequest struct {
 	Q       string    `json:"q"`
 	History []Message `json:"history"`
-	// 客户端若注入 system 消息，会在对话模块处被丢弃。
 }
 
 // Ask 处理 POST /api/ask。
+//
+// @Summary      按本班资料作简短回答
+// @Description  先以混合模式取本班前 4 条切片；有切片才调用对话网关，回答中以 [1]、[2] 标注出处。无命中时返回 status=no_evidence、固定文案与空 citations，且不调用模型。
+// @Tags         search
+// @Accept       json
+// @Produce      json
+// @Security     bearerAuth
+// @Param        body body qa.AskRequest true "问句"
+// @Success      200 {object} qa.Answer
+// @Failure      400 {object} httpx.ErrorBody
+// @Failure      401 {object} httpx.ErrorBody
+// @Failure      503 {object} httpx.ErrorBody
+// @Failure      500 {object} httpx.ErrorBody
+// @Router       /api/ask [post]
+// @ID           SRC-002
 func (h *Handler) Ask(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
@@ -31,7 +46,7 @@ func (h *Handler) Ask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req askRequest
+	var req AskRequest
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}

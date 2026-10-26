@@ -111,6 +111,41 @@ func TestSearchRejectsUnknownMode(t *testing.T) {
 	}
 }
 
+// 空绑定必须检索为空，不能退化成「不限定材料」。
+func TestEmptyScopedSearchReturnsNoHits(t *testing.T) {
+	// DB、嵌入与向量库都为 nil：只要走进任何一条检索路径就会 panic 或报错，
+	// 因此「返回空结果且无错误」本身就说明提前返回了。
+	s := New(nil, nil, nil, 0.35, 60, 10)
+
+	res, err := s.SearchScoped(context.Background(), 1, "去括号", ModeHybrid,
+		Scope{MaterialIDs: []int64{}, Scoped: true}, 4)
+	if err != nil {
+		t.Fatalf("空范围不应报错，实际 %v", err)
+	}
+	if len(res.Hits) != 0 {
+		t.Errorf("空范围应返回 0 条，实际 %d 条", len(res.Hits))
+	}
+	if res.Hits == nil {
+		t.Error("Hits 应为空数组而不是 nil，避免序列化成 null")
+	}
+}
+
+func TestScopeEmptySemantics(t *testing.T) {
+	unscoped := Scope{}
+	if unscoped.Empty() {
+		t.Error("零值 Scope 表示不限定，不应视为空范围")
+	}
+	empty := Scope{Scoped: true}
+	if !empty.Empty() {
+		t.Error("Scoped 为真且没有材料时应视为空范围")
+	}
+	filled := Scope{MaterialIDs: []int64{1}, Scoped: true}
+	if filled.Empty() {
+		t.Error("有材料时不应视为空范围")
+	}
+}
+
+
 func TestDefaultsAreApplied(t *testing.T) {
 	s := New(nil, nil, nil, 0, 0, 0)
 	if s.Threshold != 0.35 {

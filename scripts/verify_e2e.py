@@ -4,6 +4,7 @@
 不依赖第三方库，只用标准库。
 """
 
+import base64
 import http.cookiejar
 import json
 import sys
@@ -28,11 +29,16 @@ def check(name, cond, detail=""):
 
 def opener():
     cj = http.cookiejar.CookieJar()
-    return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj)), cj
+    op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+    op.token = None
+    return op, cj
 
 
 def call(op, method, path, json_body=None, raw_body=None, headers=None):
     h = dict(headers or {})
+    tok = getattr(op, "token", None)
+    if tok and "Authorization" not in h:
+        h["Authorization"] = "Bearer " + tok
     data = None
     if json_body is not None:
         data = json.dumps(json_body).encode()
@@ -66,6 +72,16 @@ def jload(raw):
         return None
 
 
+def jwt_payload(token):
+    """解码 JWT payload 段（base64url，不验签），失败返回 None。"""
+    try:
+        seg = token.split(".")[1]
+        seg += "=" * (-len(seg) % 4)
+        return json.loads(base64.urlsafe_b64decode(seg.encode()))
+    except Exception:
+        return None
+
+
 def main():
     print("=== 1. 健康检查 ===")
     op, _ = opener()
@@ -81,6 +97,9 @@ def main():
     check("未登录上传 -> 401", st == 401, f"status={st}")
     st, _, _ = call(op, "GET", "/api/materials/1/file")
     check("未登录下载 -> 401", st == 401, f"status={st}")
+    op_notoken, _ = opener()
+    st, _, _ = call(op_notoken, "GET", "/api/materials")
+    check("不带令牌 GET /api/materials -> 401", st == 401, f"status={st}")
 
     print("=== 3. 统一失败响应 ===")
     op2, _ = opener()
@@ -90,37 +109,36 @@ def main():
     check("账号不存在与口令错误状态码一致", st_a == st_b, f"{st_a} vs {st_b}")
     check("账号不存在与口令错误响应体一致", body_a == body_b, f"{body_a!r} vs {body_b!r}")
 
-    print("=== 4. 教师登录与会话 ===")
+    print("=== 4. 教师登录与令牌 ===")
     teach, teach_cj = opener()
     st, hdr, body = call(teach, "POST", "/api/login", {"username": "teacher_a", "password": "teach123"})
     info = jload(body) or {}
+    user = info.get("user") or {}
     check("教师登录 -> 200", st == 200, f"status={st}")
-    check("响应体含 id/username/role/class_id", all(k in info for k in ("id", "username", "role", "class_id")), str(info))
+    check("响应体含 token", isinstance(info.get("token"), str) and bool(info.get("token")), str(info)[:80])
+    claims = jwt_payload(info.get("token") or "")
+    check("token payload 只有注册声明 sub/jti/iat/exp",
+          claims is not None and set(claims) <= {"sub", "jti", "iat", "exp"},
+          str(sorted(claims)) if claims else "payload 解码失败")
+    check("token payload 不含角色或班级",
+          claims is not None and not any(k in claims for k in ("role", "class_id")), "")
+    check("响应体含 id/username/role/class_id", all(k in user for k in ("id", "username", "role", "class_id")), str(user))
     check("响应体不含口令明文", "teach123" not in body.decode(errors="ignore"), "")
     check("响应体不含口令哈希", "pbkdf2" not in body.decode(errors="ignore"), "")
-    sc = hdr.get("Set-Cookie", "")
-    check("Set-Cookie 已下发", "cc_session=" in sc, sc[:80])
-    check("Cookie 设置 HttpOnly", "HttpOnly" in sc, "")
-    check("Cookie 设置 SameSite", "SameSite" in sc, "")
-    check("Cookie 不含角色或班级", ("teacher" not in sc.lower()) and ("class" not in sc.lower()), "")
-    cookie_val = sc.split("cc_session=")[1].split(";")[0] if "cc_session=" in sc else ""
-    teacher_cookie = cookie_val
+    teach.token = info.get("token")
 
-    print("=== 5. 会话固定防御：登录成功换发标识 ===")
+    print("=== 5. 令牌吊销防御：携旧令牌登录会吊销旧令牌 ===")
     fix_op, _ = opener()
-    st, _, _ = call(fix_op, "POST", "/api/login", {"username": "teacher_a", "password": "teach123"},
-                    headers={"Cookie": "cc_session=attacker-preset-token-abc"})
-    new_sc = ""
-    # 重新取一次响应头
-    fix_op2, _ = opener()
-    st2, hdr2, _ = call(fix_op2, "POST", "/api/login", {"username": "teacher_a", "password": "teach123"},
-                        headers={"Cookie": "cc_session=attacker-preset-token-abc"})
-    new_sc = hdr2.get("Set-Cookie", "")
-    issued = new_sc.split("cc_session=")[1].split(";")[0] if "cc_session=" in new_sc else ""
-    check("登录成功签发了新的会话标识", bool(issued) and issued != "attacker-preset-token-abc", issued[:16])
-    op_old, _ = opener()
-    st_old, _, _ = call(op_old, "GET", "/api/materials", headers={"Cookie": "cc_session=attacker-preset-token-abc"})
-    check("预置的旧标识立即失效 -> 401", st_old == 401, f"status={st_old}")
+    st, _, body = call(fix_op, "POST", "/api/login", {"username": "teacher_a", "password": "teach123"})
+    token_a = (jload(body) or {}).get("token")
+    st, _, body = call(fix_op, "POST", "/api/login", {"username": "teacher_a", "password": "teach123"},
+                       headers={"Authorization": f"Bearer {token_a}"})
+    token_b = (jload(body) or {}).get("token")
+    check("携带未过期的旧令牌登录 -> 200 且签发新令牌",
+          st == 200 and bool(token_b) and token_b != token_a, f"status={st}")
+    st_old, _, _ = call(fix_op, "GET", "/api/materials",
+                        headers={"Authorization": f"Bearer {token_a}"})
+    check("旧令牌已被吊销 -> 401", st_old == 401, f"status={st_old}")
 
     print("=== 6. 班级隔离：列表与详情 ===")
     st, _, body = call(teach, "GET", "/api/materials")
@@ -135,6 +153,7 @@ def main():
     b1, _ = opener()
     st, _, body = call(b1, "POST", "/api/login", {"username": "student_b1", "password": "stu123"})
     check("学生 B1 登录 -> 200", st == 200, f"status={st}")
+    b1.token = (jload(body) or {}).get("token")
     st, _, body = call(b1, "GET", "/api/materials")
     b_list = (jload(body) or {}).get("materials", [])
     b_titles = [m["title"] for m in b_list]
@@ -157,7 +176,8 @@ def main():
 
     print("=== 10. 学生上传被拒绝 ===")
     s1, _ = opener()
-    call(s1, "POST", "/api/login", {"username": "student_a1", "password": "stu123"})
+    st, _, body = call(s1, "POST", "/api/login", {"username": "student_a1", "password": "stu123"})
+    s1.token = (jload(body) or {}).get("token")
     st, _, _ = call(s1, "GET", "/api/materials")
     before = len((jload(_) or {}).get("materials", [])) if False else None
     st_before, _, body_before = call(teach, "GET", "/api/materials")
@@ -214,14 +234,15 @@ def main():
     check("跨班下载与不存在下载响应一致", (st_cross, body_cross) == (st_miss, body_miss), "")
     check("跨班下载未返回文件内容", "光合作用" not in body_cross.decode("utf-8", "ignore"), "")
 
-    print("=== 14. 登出后会话立即失效 ===")
+    print("=== 14. 登出后令牌立即失效 ===")
     lo, _ = opener()
-    call(lo, "POST", "/api/login", {"username": "student_a1", "password": "stu123"})
+    st, _, body = call(lo, "POST", "/api/login", {"username": "student_a1", "password": "stu123"})
+    lo.token = (jload(body) or {}).get("token")
     st, _, _ = call(lo, "GET", "/api/materials")
     check("登出前可访问", st == 200, f"status={st}")
     call(lo, "POST", "/api/logout")
     st, _, _ = call(lo, "GET", "/api/materials")
-    check("登出后 -> 401", st == 401, f"status={st}")
+    check("登出后持原令牌 -> 401", st == 401, f"status={st}")
 
     print()
     print(f"===== 汇总：PASS={len(PASS)}  FAIL={len(FAIL)} =====")

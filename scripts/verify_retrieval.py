@@ -34,10 +34,13 @@ class Client:
     def __init__(self):
         self.cj = http.cookiejar.CookieJar()
         self.op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cj))
+        self.token = None
 
     def call(self, path, data=None, raw=None, headers=None, method=None):
         body = None
         hdrs = dict(headers or {})
+        if getattr(self, "token", None) and "Authorization" not in hdrs:
+            hdrs["Authorization"] = "Bearer " + self.token
         if raw is not None:
             body = raw
         elif data is not None:
@@ -62,7 +65,14 @@ class Client:
             return st, None
 
     def login(self, username, password):
-        return self.json("/api/login", {"username": username, "password": password})
+        st, _, body = self.call("/api/login", {"username": username, "password": password})
+        try:
+            info = json.loads(body) if body else None
+        except Exception:  # noqa: BLE001
+            info = None
+        if isinstance(info, dict):
+            self.token = info.get("token")
+        return st, info
 
 
 def multipart(fields, filename, content):

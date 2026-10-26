@@ -16,7 +16,8 @@ type Handler struct {
 
 func NewHandler(s *Service) *Handler { return &Handler{Service: s} }
 
-type searchRequest struct {
+// SearchRequest 是检索请求体，供 OpenAPI 文档引用。
+type SearchRequest struct {
 	Q    string `json:"q"`
 	Mode string `json:"mode"`
 }
@@ -24,6 +25,21 @@ type searchRequest struct {
 // Search 处理 POST /api/search。
 //
 // 请求体中的 class_id 等字段即使存在也被忽略：班级只取自会话。
+//
+// @Summary      检索本班切片
+// @Description  三种模式：keyword（仅 MySQL 全文索引）、vector（问句嵌入后按班级过滤，余弦低于阈值丢弃）、hybrid（默认，两路按名次做 RRF 融合）。每条结果给出材料标题、切片序号、字符区间与摘录。跨班检索返回 200 与空列表。
+// @Tags         search
+// @Accept       json
+// @Produce      json
+// @Security     bearerAuth
+// @Param        body body retrieval.SearchRequest true "问句与模式"
+// @Success      200 {object} retrieval.Result
+// @Failure      400 {object} httpx.ErrorBody
+// @Failure      401 {object} httpx.ErrorBody
+// @Failure      503 {object} httpx.ErrorBody
+// @Failure      500 {object} httpx.ErrorBody
+// @Router       /api/search [post]
+// @ID           SRC-001
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
@@ -31,7 +47,7 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req searchRequest
+	var req SearchRequest
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}

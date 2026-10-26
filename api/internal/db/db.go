@@ -41,8 +41,10 @@ func Connect(cfg *config.Config) (*sql.DB, error) {
 	}
 }
 
-// schema 是五张表：classes、users、sessions、materials、knowledge_entries。
-// materials 与 knowledge_entries 携带非空且带索引的租户列 class_id。
+// schema 是全部业务表：classes、users、revoked_tokens、materials、knowledge_entries、
+// knowledge_chunks，以及第 5 课的 tutor_agents、skills、tutor_agent_skills、
+// tutor_agent_materials、conversations、messages。
+// 带租户列的表其 class_id 均非空且带索引。
 var schema = []string{
 	`CREATE TABLE IF NOT EXISTS classes (
 		id   INT PRIMARY KEY,
@@ -58,14 +60,13 @@ var schema = []string{
 		CONSTRAINT fk_users_class FOREIGN KEY (class_id) REFERENCES classes(id)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
-	`CREATE TABLE IF NOT EXISTS sessions (
-		id         CHAR(64) PRIMARY KEY,
+	// 第 5 课：认证改为 JWT，sessions 表退役（迁移时 DROP），改用吊销表。
+	`CREATE TABLE IF NOT EXISTS revoked_tokens (
+		jti        CHAR(32) PRIMARY KEY,
 		user_id    BIGINT NOT NULL,
 		expires_at DATETIME NOT NULL,
-		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-		INDEX idx_sessions_user (user_id),
-		INDEX idx_sessions_expires (expires_at)
+		revoked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		INDEX idx_revoked_expires (expires_at)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
 	`CREATE TABLE IF NOT EXISTS materials (
@@ -113,10 +114,89 @@ var schema = []string{
 		INDEX idx_chunks_material (material_id),
 		FULLTEXT KEY ft_chunks_text (chunk_text) WITH PARSER ngram
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+	// 第 5 课：智能体是班级级配置单位，只保存绑定关系，不复制技能与材料正文。
+	`CREATE TABLE IF NOT EXISTS tutor_agents (
+		id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+		class_id   INT NOT NULL,
+		name       VARCHAR(64) NOT NULL,
+		prompt     TEXT NOT NULL,
+		enabled    TINYINT(1) NOT NULL DEFAULT 1,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		CONSTRAINT fk_agents_class FOREIGN KEY (class_id) REFERENCES classes(id),
+		UNIQUE KEY uk_agents_class_name (class_id, name),
+		INDEX idx_agents_class (class_id)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+	`CREATE TABLE IF NOT EXISTS skills (
+		id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+		class_id     INT NOT NULL,
+		name         VARCHAR(32) NOT NULL,
+		trigger_text VARCHAR(120) NOT NULL,
+		subject_text VARCHAR(32) NULL,
+		description  TEXT NOT NULL,
+		tools_json   JSON NOT NULL,
+		source_text  MEDIUMTEXT NOT NULL,
+		enabled      TINYINT(1) NOT NULL DEFAULT 1,
+		seed_key     VARCHAR(64) NULL,
+		created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		CONSTRAINT fk_skills_class FOREIGN KEY (class_id) REFERENCES classes(id),
+		UNIQUE KEY uk_skills_class_name (class_id, name),
+		UNIQUE KEY uk_skills_seed (class_id, seed_key)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+	`CREATE TABLE IF NOT EXISTS tutor_agent_skills (
+		agent_id BIGINT NOT NULL,
+		skill_id BIGINT NOT NULL,
+		PRIMARY KEY (agent_id, skill_id),
+		CONSTRAINT fk_tas_agent FOREIGN KEY (agent_id) REFERENCES tutor_agents(id) ON DELETE CASCADE,
+		CONSTRAINT fk_tas_skill FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+	`CREATE TABLE IF NOT EXISTS tutor_agent_materials (
+		agent_id    BIGINT NOT NULL,
+		material_id BIGINT NOT NULL,
+		PRIMARY KEY (agent_id, material_id),
+		CONSTRAINT fk_tam_agent FOREIGN KEY (agent_id) REFERENCES tutor_agents(id) ON DELETE CASCADE,
+		CONSTRAINT fk_tam_material FOREIGN KEY (material_id) REFERENCES materials(id) ON DELETE CASCADE
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+	// 会话只记归属、选定的智能体与标题；正文与出处落在 messages。
+	`CREATE TABLE IF NOT EXISTS conversations (
+		id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+		class_id   INT NOT NULL,
+		user_id    BIGINT NOT NULL,
+		agent_id   BIGINT NOT NULL,
+		title      VARCHAR(64) NOT NULL,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		CONSTRAINT fk_conv_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+		CONSTRAINT fk_conv_agent FOREIGN KEY (agent_id) REFERENCES tutor_agents(id),
+		INDEX idx_conv_user (user_id, updated_at),
+		INDEX idx_conv_class (class_id)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+	`CREATE TABLE IF NOT EXISTS messages (
+		id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+		conversation_id BIGINT NOT NULL,
+		role            ENUM('user','assistant') NOT NULL,
+		content         MEDIUMTEXT NOT NULL,
+		citations_json  JSON NULL,
+		skill_name      VARCHAR(32) NULL,
+		created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		CONSTRAINT fk_msg_conv FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+		INDEX idx_msg_conv (conversation_id, id)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 }
 
 // Migrate 建表（幂等）。
 func Migrate(database *sql.DB) error {
+	// 第 5 课：认证改为 JWT，服务端会话表退役。
+	if _, err := database.Exec(`DROP TABLE IF EXISTS sessions`); err != nil {
+		return fmt.Errorf("删除 sessions 表失败: %w", err)
+	}
 	for i, stmt := range schema {
 		if _, err := database.Exec(stmt); err != nil {
 			return fmt.Errorf("建表失败（第 %d 条）: %w", i+1, err)
@@ -235,10 +315,11 @@ func Seed(database *sql.DB, cfg *config.Config) error {
 	}
 
 	// 种子材料同时落盘，保证下载接口对预置数据也可验收。
-	// 正文含 Markdown 标题与多段落，使 auto 与 hierarchy 切分策略都有可演示的输入。
+	// 标题带学科前缀：第 5 课的技能按「资料」字段过滤材料标题
+	//     （如数学解题引导的「资料：数学」只保留标题含「数学」的材料）。
 	materials := []seedMaterial{
-		{1, "A 班 · 一元二次方程讲义", seedQuadratic, filepath.Join("1", "seed_a_quadratic.md")},
-		{2, "B 班 · 光合作用讲义", seedPhotosynthesis, filepath.Join("2", "seed_b_photosynthesis.md")},
+		{1, "A 班 · 数学一元二次方程讲义", seedQuadratic, filepath.Join("1", "seed_a_quadratic.md")},
+		{2, "B 班 · 生物光合作用讲义", seedPhotosynthesis, filepath.Join("2", "seed_b_photosynthesis.md")},
 	}
 	for _, m := range materials {
 		abs := filepath.Join(cfg.UploadDir, m.relPath)
