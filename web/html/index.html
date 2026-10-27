@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CampusClaw · 班级教研知识库</title>
-  <link rel="stylesheet" href="/style.css">
+  <!-- 资源带版本号：改了前端就把它加一，避免浏览器沿用旧文件（配合 nginx 的 no-cache） -->
+  <link rel="stylesheet" href="/style.css?v=6">
 </head>
 <body>
   <div class="accent-bar" aria-hidden="true"></div>
@@ -351,6 +352,6 @@
     <p id="message" class="message" hidden></p>
   </main>
 
-  <script src="/app.js"></script>
+  <script src="/app.js?v=6"></script>
 </body>
 </html>
