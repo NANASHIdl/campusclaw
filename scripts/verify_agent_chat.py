@@ -294,12 +294,12 @@ CHINESE_DOC = (
     "写完后逐字对照，重点检查同音字和形近字，尤其是「晓」「啼」「落」三个字。\n"
 )
 
-BIOLOGY_DOC = (
-    "# 第5课 · 生物 · 光合作用（未绑定）\n\n"
-    "## 光反应\n\n"
-    "光系统Ⅱ分布在叶绿体的基粒上，水的光解在这里产生氧气，同时生成 ATP 和 NADPH。\n\n"
-    "## 暗反应\n\n"
-    "暗反应在叶绿体基质中进行，固定二氧化碳形成三碳化合物，再被还原成糖类。\n"
+GEO_DOC = (
+    "# 第5课 · 地理 · 等高线（未绑定）\n\n"
+    "## 判读\n\n"
+    "等高线越密集，坡度越陡；越稀疏，坡度越缓。闭合曲线中心高、四周低，表示山顶。\n\n"
+    "## 绘制\n\n"
+    "相邻等高线的高差叫等高距，同一幅图上等高距一致。山谷处的等高线向高处凸出。\n"
 )
 
 
@@ -693,11 +693,11 @@ def main():
     st, body = teacher.json("/api/materials/upload", raw=raw, headers=hdrs)
     chin_mat = (body or {}).get("material_id")
     check("上传语文材料 = 201", st == 201, f"实际 {st} {body}")
-    raw, hdrs = multipart({"chunk_strategy": "auto"}, f"第5课生物{TS}.md", BIOLOGY_DOC)
+    raw, hdrs = multipart({"chunk_strategy": "auto"}, f"第5课地理{TS}.md", GEO_DOC)
     st, body = teacher.json("/api/materials/upload", raw=raw, headers=hdrs)
-    bio_mat = (body or {}).get("material_id")
+    geo_mat = (body or {}).get("material_id")
     check("上传未绑定材料 = 201", st == 201, f"实际 {st} {body}")
-    if not all([math_mat, chin_mat, bio_mat]):
+    if not all([math_mat, chin_mat, geo_mat]):
         print("  材料准备失败，后续断言不可信，终止。")
         return 1
 
@@ -976,11 +976,11 @@ def main():
     check("按技能「资料」字段过滤：引用只含数学材料",
           all("数学" in t for t in titles), f"实际 {titles}")
 
-    st, hd, events, meta_bio, answer_bio = ask(student, conv_main, "光系统Ⅱ在哪个结构上进行")
-    bio_cites = meta_bio.get("citations") or []
+    st, hd, events, meta_geo, answer_geo = ask(student, conv_main, "等高线越密集说明什么")
+    geo_cites = meta_geo.get("citations") or []
     check("不越出绑定材料：未绑定材料不出现在引用中",
-          all(c.get("material_id") != bio_mat for c in bio_cites),
-          f"实际 {[c.get('material_id') for c in bio_cites]}")
+          all(c.get("material_id") != geo_mat for c in geo_cites),
+          f"实际 {[c.get('material_id') for c in geo_cites]}")
 
     nums = [int(n) for n in re.findall(r"\[(\d+)\]", answer_math or "")]
     check("回答中的 [n] 不超出引用列表长度",

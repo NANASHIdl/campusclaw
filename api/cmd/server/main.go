@@ -241,6 +241,15 @@ func openapiDocument() ([]byte, error) {
 	return openapi.Convert([]byte(raw))
 }
 
+// swaggerUIHandler 让官方 Swagger UI 直接读 /openapi.json，
+// 而不是 http-swagger 默认的 doc.json（那是 swag 的 Swagger 2.0 产物）。
+// 这样页面上看到的与机器读到的是同一份 OpenAPI 3.0 描述，认证方案也是
+// bearerAuth(http/bearer)，在页内只需填令牌，不必手写「Bearer 」前缀。
+var swaggerUIHandler = httpSwagger.Handler(
+	httpSwagger.URL("/openapi.json"),
+	httpSwagger.PersistAuthorization(true),
+)
+
 // swaggerUI 提供官方 Swagger UI。静态资源随依赖内嵌，运行期不访问外网。
 //
 // @Summary      接口调试页面（Swagger UI）
@@ -252,7 +261,7 @@ func openapiDocument() ([]byte, error) {
 // @Router       /swagger/index.html [get]
 // @ID           DOC-002
 func swaggerUI(w http.ResponseWriter, r *http.Request) {
-	httpSwagger.WrapHandler(w, r)
+	swaggerUIHandler(w, r)
 }
 
 type statusRecorder struct {

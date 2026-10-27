@@ -26,3 +26,6 @@ __pycache__/
 # 接口测试的 HTML 报告与中间产物
 apitest/report/
 apitest/.cache/
+
+# 前端点验截图
+scripts/.frontend-report/

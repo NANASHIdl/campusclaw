@@ -77,8 +77,8 @@
 - [x] 9.3 `meta` 含 `status`、命中技能与引用列表，且为第一个事件 — verify: 首个事件即可读出出处
 - [x] 9.4 `delta` 为增量：拼接等于落库全文 — verify: 与 `messages.content` 逐字一致
 - [x] 9.5 `done` 返回助手消息编号；该消息含 `citations_json` 与 `skill_name` — verify: 按编号可查到
-- [ ] 9.6 状态码分界线：首事件前 404/503；之后只发 `error`，HTTP 仍 200 — verify: 不存在会话 404 且不建流（**已验证**）；生成失败时状态码 200（**需人工注入故障，见验收记录**）
-- [ ] 9.7 中途失败：已产出片段收尾落库 — verify: 人为中断后消息表有部分内容（**需人工注入故障，见验收记录**）
+- [x] 9.6 状态码分界线：首事件前 404/503；之后只发 `error`，HTTP 仍 200 — verify: 不存在会话 404 且不建流；生成失败时状态码 200
+- [x] 9.7 中途失败：已产出片段收尾落库 — verify: 人为中断后消息表有部分内容
 - [x] 9.8 无依据口径：仍调用模型，引用为空，正文不含 `[n]`，不等于固定文案 — verify: 问材料外内容时正文无编号且非空
 - [x] 9.9 `content` 长度 2–500，越界在流开始前 400 — verify: 1 字符与 501 字符均 400
 - [x] 9.10 Nginx：`proxy_buffering off`、`proxy_cache off` — verify: 去掉后文字一次性到达，加回后逐段到达
@@ -94,16 +94,17 @@
 
 ## 11. 前端（T11）
 
-> 界面已在 Apply 阶段实现（`web/html/` 三页签：解题对话 / 智能体 / 技能），
-> 但本课验收走接口层脚本，未做浏览器人工点验，故以下各项保持未勾选。
-> 服务端一侧的权限已由脚本覆盖（学生写智能体/技能 403、学生只见已启用智能体）。
+- [x] 11.1 登录改为保存 `token` 到 `sessionStorage`，所有请求加 `Authorization: Bearer` — verify: 刷新页面仍在线；清空 `sessionStorage` 后回到登录页
+- [x] 11.2 提示词页：教师可编辑本班提示词，学生只读 — verify: 学生登录看不到保存按钮，直接调接口仍 403
+- [x] 11.3 智能体页：列表、新建/编辑、启停、绑定技能与材料（仅教师可见写入口） — verify: 学生看不到写按钮
+- [x] 11.4 技能页：粘贴/上传技能文件、编辑、启停、删除 — verify: 非法文件显示可读错误
+- [x] 11.5 对话页：选智能体新建会话 → 连续追问 → `fetch` 解帧逐段渲染 → 展示引用 — verify: 文字逐段出现；结束后可打开引用材料
+- [x] 11.6 北大红主题一致 — verify: 新页面主色与既有页面一致
 
-- [ ] 11.1 登录改为保存 `token` 到 `sessionStorage`，所有请求加 `Authorization: Bearer` — verify: 刷新页面仍在线；清空 `sessionStorage` 后回到登录页
-- [ ] 11.2 提示词页：教师可编辑本班提示词，学生只读 — verify: 学生登录看不到保存按钮，直接调接口仍 403
-- [ ] 11.3 智能体页：列表、新建/编辑、启停、绑定技能与材料（仅教师可见写入口） — verify: 学生看不到写按钮
-- [ ] 11.4 技能页：粘贴/上传技能文件、编辑、启停、删除 — verify: 非法文件显示可读错误
-- [ ] 11.5 对话页：选智能体新建会话 → 连续追问 → `fetch` 解帧逐段渲染 → 展示引用 — verify: 文字逐段出现；结束后可打开引用材料
-- [ ] 11.6 北大红主题一致 — verify: 新页面主色与既有页面一致
+> 11.x 用真实 Chrome 逐条点验（方式见验收记录「前端点验」）。
+> 两点实现口径需说明：① 提示词是**智能体的字段**，没有独立的「提示词页」
+> （proposal 的 Non-goals 明确不做班级级提示词端点），11.2 落在智能体表单的提示词输入框上；
+> ② 引用以「[n] 材料标题 · 切片 N」徽标展示，原文在「本班材料」页下载查看。
 
 ## 12. 自动化测试工程（T12）
 
@@ -135,6 +136,9 @@
 | 第 3 课回归 | `BASE_URL=http://127.0.0.1:8081 python scripts/verify_e2e.py` | **PASS=45 FAIL=0** |
 | 第 4 课回归 | `BASE_URL=http://127.0.0.1:8081 python scripts/verify_retrieval.py` | **PASS=72 FAIL=0** |
 | 第 5 课新增 | `BASE_URL=http://127.0.0.1:8081 python scripts/verify_agent_chat.py` | **PASS=208 FAIL=0** |
+| 前端点验 | `node scripts/verify_frontend.mjs`（真实 Chrome） | **PASS=42 FAIL=0** |
+
+> 上表数字在最后一次改动（Swagger UI 改读 `/openapi.json`、未绑定材料改为地理）之后全部重跑确认。
 
 `verify_agent_chat.py` 分 15 节，逐条对应三个 capability 的 Scenario：
 
@@ -173,39 +177,68 @@
 - `openspec validate add-agent-streaming-chat --strict` → valid。
 - `docker compose down` → `up -d` 后历史会话仍可读（12 条消息、标题不变），13.5 通过。
 
-### Apply 阶段修掉的两个规约偏差
+### Apply 阶段修掉的三个规约偏差
 
 1. **`/openapi.json` 当时是 Swagger 2.0**（`swagger: "2.0"` + `securityDefinitions.apiKey`），不满足 api-docs 规约要求的 OpenAPI 3.0 与 `bearerAuth`（http/bearer/JWT）。改为「注解仍是唯一来源，输出前做一次格式投影」：新增 `api/internal/openapi`，并把 swag 的 `apiKey` 声明翻译成标准 `http/bearer` 方案。同时补齐 `/openapi.json`、`/swagger/index.html` 两个操作与全部 5xx 说明。
 2. **空绑定会越界检索**：`Scope{MaterialIDs: nil}` 在关键字与向量两条路径上都被当作「不限定材料」，导致未绑定任何材料的智能体能检索到全班内容。为 `Scope` 增加 `Scoped` 标记，`chat` 侧显式传 `Scoped: true`，空范围直接返回空结果（`retrieval` 单测覆盖）。
+3. **Swagger UI 读的还是 2.0 的 `doc.json`**（页面内授权方案是 `apiKey`，需要手写「Bearer 」前缀），与规约「OpenAPI 3.0 描述是唯一来源」不一致。改为 `httpSwagger.Handler(httpSwagger.URL("/openapi.json"), httpSwagger.PersistAuthorization(true))`：页面与机器读同一份 3.0 描述，授权框只填令牌即可，且刷新后保留授权状态。
 
 配套把 `main.go` 的内联注册改为路由表（`cmd/server/routes.go`），注册与启动自检读同一份数据，`checkRoutes` 在启动时比对「注解操作集合 = 注册路由集合」，不等即 `log.Fatalf` 并指出缺失项（`routes_test.go` 覆盖缺注解/多注解/`docPath` 映射三种情形）。
 
-### 证据口径说明（10.4 / 10.5 / 10.6）
+### 前端点验（11.1–11.6，真实浏览器）
 
-这三条的 verify 写法偏「人工」，实际用等价手段验证，记录口径如下：
+用本机 Chrome（`--headless=new --remote-debugging-port=9222`）+ 自写 CDP 客户端驱动真实交互，
+逐条点验并截图留证，**42 条断言全部通过**：
 
-- **10.4**：`/swagger/index.html` 返回 200，页面引用的 `swagger-ui.css`、`swagger-ui-bundle.js`、
-  `doc.json` 全部本地可取；「页面内试调」发出的就是带 `Authorization: Bearer` 的同一套请求，
-  已由 `verify_agent_chat.py` 与 `apitest` 覆盖，未做人工点击。
-- **10.5**：未真的删注解重启，而是对 `checkRoutes`（`main.go` 启动时调用的同一个函数）
-  写了三条单测：缺注解报错并指出 `DELETE /api/skills/{id}`、多注解报错并指出 `POST /api/ghost`、
-  `docPath` 映射生效。
-- **10.6**：静态确认页面无 jsdelivr/unpkg/cdnjs 引用，且全部资源从本项目 200 取回；
-  未做真实断网。
+| 条目 | 操作 | 结果 |
+| --- | --- | --- |
+| 11.1 | 登录 → 读 `sessionStorage.cc_token` → 刷新 → 清空 `sessionStorage` 再刷新 | 令牌在会话存储里；刷新仍在线；清空后回到登录页 |
+| 11.6 | 读主按钮计算样式与 `--pku-red` | `rgb(148,7,10)` / `#94070A` |
+| 11.3 | 智能体页：新建 → 行内「编辑」→ 取消勾选「启用」保存 | 列表新增、进入编辑态、状态列变「已停用」 |
+| 11.2 | 教师改提示词保存；学生登录看同一页 | 提示词列更新为提交内容；学生侧 0 个「编辑」按钮、无表单，直接调 `POST /api/agents` 仍 403 |
+| 11.4 | 技能页：粘非法文件 → 粘合法文件 → 编辑改「启用：否」→ 删除（原生 confirm 自动确认） | 提示「技能文件需要一个空行，空行下面写技能说明」；保存成功；状态列变「已停用」；删除后行消失 |
+| 11.5 | 选智能体 → 新建会话 → 提问 → 连续追问 | 正文长度采样 `[0,7,23,38,54]`（逐段增长，非一次性整段）；`conv-meta` 显示「已找到依据 · 技能：数学解题引导」；引用徽标 2 条随首个事件到达；第二轮正常 |
 
-### 未勾选项与人工步骤
+截图：登录页、智能体页（教师/学生）、技能页、对话页、Swagger 试调结果，共 6 张。
 
-- **9.6 / 9.7（流开始后的失败语义）**：需要人为制造生成故障，脚本无法稳定复现。步骤：
-  1. 把 `.env` 的 `CHAT_BASE_URL` 临时指向不可达地址（如 `http://127.0.0.1:9/v1`），`docker compose up -d api`；
-  2. 向已有会话提问：期望 HTTP **200** + 一条 `error` 事件（9.6 后半）；
-  3. 若已推送部分 `delta` 再失败，`messages` 表应留下部分正文（9.7）；
-  4. 复原 `.env` 并重启 api。
-- **11.1–11.6（前端界面）**：需要浏览器人工点验。本课自动化验收只覆盖接口层，
-  服务端权限已由脚本验证（学生写智能体/技能 403、学生只见已启用智能体、SSE 逐段到达）。
+复跑方式（脚本已入库，不依赖任何 npm 包）：
+
+```bash
+chrome --headless=new --remote-debugging-port=9222 about:blank   # 或直接开 Chrome 加同样参数
+node scripts/verify_frontend.mjs    # 42 条断言 + 截图落在 scripts/.frontend-report/
+```
+
+### 流式故障注入（9.6 / 9.7）
+
+- **9.6**：把 `CHAT_BASE_URL` 指向不可达地址（`http://127.0.0.1:9/v1`）后重建 api，向已有会话提问：
+  `HTTP 200`、`Content-Type: text/event-stream`、事件序列 `meta → error`（delta 0 条），
+  库里只有本轮 user 消息、没有 assistant 消息 —— 首事件前失败返回真正的状态码、流开始后只以
+  `error` 收尾且不改状态码，两条都成立。
+- **9.7**：起一个假网关（`socket` 手写 chunked 响应），先推 3 段 delta 再断开、不发结束块；
+  提问后事件序列 `meta → delta×3 → error`，HTTP 仍 200，`messages` 表留下半截助手消息
+  （`先看括号前的系数有没有`，11 字）—— 已产出片段照常收尾落库。
+
+两条注入完成后均复原 `.env` 并重建 api，`/health` 回到 200。
+
+### 文档三项（10.4 / 10.5 / 10.6）
+
+- **10.4**：在 Swagger 页面里点 `Authorize` 填令牌 → 展开 `GET /api/me` → `Try it out` → `Execute`，
+  页面内实际发出请求并显示 **200** 与当前用户 JSON（`teacher_a / teacher / class_id 1`）。
+- **10.5**：真的把 `DELETE /api/skills/{id}` 的 `@Router` 注解注释掉，`swag init` + 重建镜像后
+  api 进入 `Restarting`，日志为
+  `接口文档自检失败: 注解与注册路由不一致：代码有但注解缺 [DELETE /api/skills/{id}]；注解有但代码无 []`；
+  复原注解、重生成、重建后恢复 `Up`，`/openapi.json` 仍是 21 条路径 27 个操作。
+- **10.6**：用浏览器加载 `/swagger/index.html`，期间收集全部网络请求：**8 个请求全部指向
+  `http://127.0.0.1:8081`，无任何外部域名请求**，接口列表正常渲染。
+
+### 未勾选项
+
 - **13.6（归档）**：规约写明「待课程确认后执行」，本课不归档。
 
-### 已知副作用
+### 已知副作用与注意点
 
 - 智能体没有删除接口（规约未定义），验收脚本每次新建的智能体带时间戳名称，会留在库中；
-  验收脚本上传的材料同样保留（与第 3、4 课脚本的做法一致）。为不破坏第 4 课「类囊体只在 B 班」的断言，
-  第 5 课脚本改用「光系统Ⅱ」作为未绑定材料的专属词。
+  验收脚本上传的材料同样保留（与第 3、4 课脚本的做法一致）。
+- 第 5 课脚本的「未绑定材料」必须与第 4 课保留词**语义也不相近**：最初用「光系统Ⅱ」，
+  虽不含「类囊体」三字，但向量检索把光合作用材料当作近邻命中，第 4 课回归一度 70/72；
+  现已改用地理「等高线」，并在库中清掉此前注入的生物材料与向量点。
