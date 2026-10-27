@@ -87,29 +87,88 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	sse := &sseWriter{w: w, f: flusher}
 
-	// ⑧ 引用与技能先到，页面立刻能显示出处。
 	var skillInfo any
 	if p.HasSkill {
 		skillInfo = map[string]any{"id": p.Skill.ID, "name": p.Skill.Name}
 	}
-	if err := sse.send("meta", map[string]any{
-		"status":    p.Status(),
-		"skill":     skillInfo,
-		"citations": p.Hits,
-	}); err != nil {
-		log.Printf("chat: 推送 meta 失败: %v", err)
-		return
+
+	// meta 里 tool_calls 只在本次确有调用时出现——与引用列表同一口径，有则带上、没有则省去。
+	metaPayload := func(runs []toolRun) map[string]any {
+		payload := map[string]any{
+			"status":    p.Status(),
+			"skill":     skillInfo,
+			"citations": p.Hits,
+		}
+		if len(runs) > 0 {
+			calls := make([]map[string]any, 0, len(runs))
+			for _, run := range runs {
+				calls = append(calls, map[string]any{
+					"ref": run.Ref, "status": run.Status, "text": run.Text,
+				})
+			}
+			payload["tool_calls"] = calls
+		}
+		return payload
 	}
 
-	// ⑨⑩ 组消息并逐段生成。
-	full, genErr := h.Service.Chat.AnswerPrompt(r.Context(), qa.Prompt{
-		System:        p.SystemPrompt(),
-		UserText:      p.UserMessage(),
-		History:       p.History,
-		WithCitations: len(p.Hits) > 0,
-	}, func(delta string) error {
-		return sse.send("delta", map[string]string{"text": delta})
-	})
+	// 闸门：没有候选工具时一开始就打开（第 5 课行为不变）；
+	// 有候选工具时先跑循环，等这一轮确定为最终回答，再发 meta 并冲刷缓冲。
+	gateOpen := len(p.ToolSpecs) == 0
+	var buffered []string
+
+	emit := func(text string) error {
+		if !gateOpen {
+			buffered = append(buffered, text)
+			return nil
+		}
+		return sse.send("delta", map[string]string{"text": text})
+	}
+
+	openGate := func(runs []toolRun) error {
+		if gateOpen {
+			return nil
+		}
+		if err := sse.send("meta", metaPayload(runs)); err != nil {
+			return err
+		}
+		gateOpen = true
+		pending := buffered
+		buffered = nil
+		for _, text := range pending {
+			if err := sse.send("delta", map[string]string{"text": text}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if gateOpen {
+		if err := sse.send("meta", metaPayload(nil)); err != nil {
+			log.Printf("chat: 推送 meta 失败: %v", err)
+			return
+		}
+	}
+
+	// ⑨⑩ 组消息并逐段生成；有候选工具时走调用循环。
+	var (
+		full   string
+		runs   []toolRun
+		genErr error
+	)
+	if len(p.ToolSpecs) == 0 {
+		full, genErr = h.Service.Chat.AnswerPrompt(r.Context(), qa.Prompt{
+			System:        p.SystemPrompt(),
+			UserText:      p.UserMessage(),
+			History:       p.History,
+			WithCitations: len(p.Hits) > 0,
+		}, emit)
+	} else {
+		full, runs, genErr = h.Service.answerWithTools(r.Context(), p, emit)
+		if err := openGate(runs); err != nil {
+			log.Printf("chat: 推送 meta 失败: %v", err)
+			return
+		}
+	}
 
 	skillName := ""
 	if p.HasSkill {

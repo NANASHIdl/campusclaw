@@ -12,6 +12,7 @@ import (
 	"campusclaw/api/internal/chat"
 	"campusclaw/api/internal/conversation"
 	"campusclaw/api/internal/materials"
+	"campusclaw/api/internal/mcp"
 	"campusclaw/api/internal/qa"
 	"campusclaw/api/internal/retrieval"
 	"campusclaw/api/internal/skill"
@@ -56,6 +57,7 @@ type endpoints struct {
 	skills    *skill.Handler
 	convs     *conversation.Handler
 	chat      *chat.Handler
+	mcp       *mcp.Handler
 }
 
 // buildRoutes 返回本项目全部路由。
@@ -99,6 +101,16 @@ func buildRoutes(e endpoints) []route {
 		{"POST", "/api/skills", "", authTeacher, e.skills.Create},
 		{"PUT", "/api/skills/{id}", "", authTeacher, e.skills.Update},
 		{"DELETE", "/api/skills/{id}", "", authTeacher, e.skills.Delete},
+
+		// 第 6 课：MCP 工具接入（全部仅教师）
+		{"GET", "/api/mcp/servers", "", authTeacher, e.mcp.List},
+		{"POST", "/api/mcp/servers", "", authTeacher, e.mcp.Create},
+		{"PUT", "/api/mcp/servers/{id}", "", authTeacher, e.mcp.Update},
+		{"DELETE", "/api/mcp/servers/{id}", "", authTeacher, e.mcp.Delete},
+		{"POST", "/api/mcp/servers/{id}/connect", "", authTeacher, e.mcp.Connect},
+		{"POST", "/api/mcp/servers/{id}/disconnect", "", authTeacher, e.mcp.Disconnect},
+		{"GET", "/api/mcp/servers/{id}/tools", "", authTeacher, e.mcp.Tools},
+		{"GET", "/api/mcp/tool-calls", "", authTeacher, e.mcp.Calls},
 	}
 }
 

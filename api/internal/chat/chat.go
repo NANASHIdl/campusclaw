@@ -17,6 +17,7 @@ import (
 
 	"campusclaw/api/internal/agent"
 	"campusclaw/api/internal/conversation"
+	"campusclaw/api/internal/mcp"
 	"campusclaw/api/internal/qa"
 	"campusclaw/api/internal/retrieval"
 	"campusclaw/api/internal/skill"
@@ -30,6 +31,10 @@ const (
 	DefaultDocRunes     = 800
 	MinContentRunes     = 2
 	MaxContentRunes     = 500
+
+	// 第 6 课：调用循环的两个闸门。轮次防死循环，累计次数防成本失控。
+	DefaultMaxRounds = 3
+	DefaultMaxCalls  = 4
 )
 
 // 对外错误。
@@ -56,6 +61,12 @@ type Service struct {
 	Retrieval *retrieval.Service
 	Chat      qa.StreamingProvider
 
+	// 第 6 课：MCP 工具接入。MCP 为空时整条工具链路自动关闭（回落到第 5 课行为）。
+	MCP       *mcp.Repo
+	MCPClient *mcp.Client
+	MaxRounds int
+	MaxCalls  int
+
 	TopN         int
 	Window       int
 	HistoryRunes int
@@ -73,6 +84,10 @@ type Prepared struct {
 	UserText  string
 	Contexts  []qa.Context
 	DocRunes  int
+
+	// 第 6 课：本次提问的候选工具（只来自命中技能的引用）与工具名到引用的映射。
+	ToolSpecs []qa.ToolSpec
+	ToolRefs  map[string]mcp.Ref
 }
 
 // Prepare 执行链路的前七步；任一步失败即返回，此时尚未开始流。
@@ -128,9 +143,13 @@ func (s *Service) Prepare(ctx context.Context, userID, classID, convID int64, co
 		return nil, fmt.Errorf("%w: 读取历史失败", ErrDependency)
 	}
 
+	// ⑧ 候选集：本次只带命中技能引用的工具（最小权限，配置期划定上限）。
+	specs, refs := s.toolCandidates(classID, sk, hasSkill)
+
 	p := &Prepared{
 		Conv: conv, Agent: ag, Skill: sk, HasSkill: hasSkill,
 		Hits: hits, History: history, UserText: content, DocRunes: s.docRunes(),
+		ToolSpecs: specs, ToolRefs: refs,
 	}
 	p.Contexts = make([]qa.Context, 0, len(hits))
 	for _, h := range hits {

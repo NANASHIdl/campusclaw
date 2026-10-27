@@ -461,6 +461,12 @@ def main():
         ("get", "/api/skills/{id}"), ("put", "/api/skills/{id}"), ("delete", "/api/skills/{id}"),
         ("get", "/api/conversations"), ("post", "/api/conversations"),
         ("get", "/api/conversations/{id}"), ("post", "/api/conversations/{id}/messages"),
+        # 第 6 课新增：MCP 工具接入（文档与路由集合必须同步扩大）
+        ("get", "/api/mcp/servers"), ("post", "/api/mcp/servers"),
+        ("put", "/api/mcp/servers/{id}"), ("delete", "/api/mcp/servers/{id}"),
+        ("post", "/api/mcp/servers/{id}/connect"),
+        ("post", "/api/mcp/servers/{id}/disconnect"),
+        ("get", "/api/mcp/servers/{id}/tools"), ("get", "/api/mcp/tool-calls"),
     }
     actual = {(m.lower(), p) for p, ops in paths.items() for m in ops}
     missing = EXPECTED - actual

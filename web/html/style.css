@@ -392,6 +392,10 @@ td button.link { margin-left: 14px; }
   border: 1px solid var(--pku-red-line);
 }
 .badge.ok { background: var(--ok-weak); color: var(--ok); border-color: #CFE4D7; }
+
+/* 第 6 课：对话里的工具徽标，与引用徽标同一层级 */
+.msg-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.msg-tools .badge { background: var(--surface); color: var(--muted); border-color: var(--border); }
 .badge.warn { background: var(--danger-weak); color: var(--danger); border-color: #EFCFCB; }
 
 .chunk, .hit {

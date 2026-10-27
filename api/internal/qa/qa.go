@@ -80,12 +80,16 @@ func (g *gatewayProvider) Kind() string { return "gateway" }
 type chatMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+	// 带工具时才有：助手提出的调用，以及回传结果的 tool_call_id。
+	ToolCalls  []wireToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string         `json:"tool_call_id,omitempty"`
 }
 
 type chatRequest struct {
 	Model    string        `json:"model"`
 	Messages []chatMessage `json:"messages"`
 	Stream   bool          `json:"stream,omitempty"`
+	Tools    []wireTool    `json:"tools,omitempty"`
 }
 
 type chatResponse struct {

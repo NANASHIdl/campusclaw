@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"campusclaw/api/internal/mcp"
 )
 
 // 长度上限（按字符计）。
@@ -32,7 +34,7 @@ var (
 	ErrTooLongFile  = fmt.Errorf("技能文件不能超过 %d 字", MaxFileRunes)
 	ErrUnknownField = errors.New("技能文件里有未定义的字段")
 	ErrDuplicate    = errors.New("技能文件里同一字段出现了两次")
-	ErrBadTool      = fmt.Errorf("工具只能是 %s", ToolKnowledgeSearch)
+	ErrBadTool      = fmt.Errorf("工具项只接受内置 %s 或「工具名@服务器名」引用（如 formula_hint@campus-tools）", ToolKnowledgeSearch)
 	ErrBadEnabled   = errors.New("启用只能写「是」或「否」")
 	ErrNotFound     = errors.New("技能不存在")
 	ErrDuplicateName = errors.New("本班已有同名技能")
@@ -156,6 +158,10 @@ func splitKeyValue(line string) (string, string, bool) {
 	return "", "", false
 }
 
+// parseTools 解析「工具」项：内置项与「工具名@服务器名」引用混写。
+//
+// 这里只校验**格式**；引用指向的服务器是否登记、是否连接、工具是否在清单内，
+// 属于配置期语义校验，由 Handler 通过 ToolValidator 完成（需要查库）。
 func parseTools(raw string) ([]string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -164,8 +170,12 @@ func parseTools(raw string) ([]string, error) {
 	parts := splitList(raw)
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
-		if p != ToolKnowledgeSearch {
-			return nil, fmt.Errorf("%w（收到 %q）", ErrBadTool, p)
+		if p == ToolKnowledgeSearch {
+			out = append(out, p)
+			continue
+		}
+		if _, err := mcp.ParseRef(p); err != nil {
+			return nil, fmt.Errorf("%w：%v", ErrBadTool, err)
 		}
 		out = append(out, p)
 	}

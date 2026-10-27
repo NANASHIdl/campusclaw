@@ -59,6 +59,14 @@ type Config struct {
 	RRFK            int
 	SearchLimit     int
 	AskTopN         int
+
+	// --- 第 6 课：MCP 工具接入 ---
+	//
+	// 工具服务的地址由教师在界面上登记，这里只放调用参数：
+	// 单次调用超时、一次提问的轮次上限与累计调用次数上限。
+	MCPTimeout   time.Duration
+	MCPMaxRounds int
+	MCPMaxCalls  int
 }
 
 func Load() (*Config, error) {
@@ -108,6 +116,10 @@ func Load() (*Config, error) {
 	cfg.RRFK = int(getenvInt64("RRF_K", 60))
 	cfg.SearchLimit = int(getenvInt64("SEARCH_LIMIT", 10))
 	cfg.AskTopN = int(getenvInt64("ASK_TOP_N", 4))
+
+	cfg.MCPTimeout = time.Duration(getenvInt64("MCP_TIMEOUT_SECONDS", 15)) * time.Second
+	cfg.MCPMaxRounds = int(getenvInt64("MCP_MAX_ROUNDS", 3))
+	cfg.MCPMaxCalls = int(getenvInt64("MCP_MAX_CALLS", 4))
 
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("缺少必需环境变量: %s（参见 .env.example）", strings.Join(missing, ", "))

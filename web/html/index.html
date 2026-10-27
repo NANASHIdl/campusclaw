@@ -47,6 +47,7 @@
         <button type="button" class="tab is-active" data-tab="chat">解题对话</button>
         <button type="button" class="tab" data-tab="agents">智能体</button>
         <button type="button" class="tab" data-tab="skills">技能</button>
+        <button type="button" class="tab" data-tab="mcp" id="tab-btn-mcp">工具服务</button>
         <button type="button" class="tab" data-tab="materials">本班材料</button>
         <button type="button" class="tab" data-tab="search">知识检索</button>
       </nav>
@@ -153,6 +154,62 @@
               <button type="button" id="skill-cancel" class="btn-ghost">取消</button>
             </div>
           </form>
+        </div>
+      </div>
+
+      <!-- ============ 工具服务（第 6 课） ============ -->
+      <div id="tab-mcp" hidden>
+        <div class="card">
+          <h1>工具服务</h1>
+          <p class="sub">MCP 工具服务把外部能力接进对话。「连接」＝握手 + 发现：两步都成功才用本次清单整体替换旧清单；断开即清空。令牌只存在服务端，界面只显示是否已配置。</p>
+          <table id="mcp-table">
+            <thead><tr><th>ID</th><th>名称</th><th>地址</th><th>令牌</th><th>状态</th><th>工具</th><th>最近错误</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <p class="empty" id="mcp-empty" hidden>本班暂无工具服务。</p>
+        </div>
+
+        <div class="card" id="mcp-form-card">
+          <h2 id="mcp-form-title">登记工具服务</h2>
+          <form id="mcp-form">
+            <input type="hidden" id="mcp-id">
+            <div class="field">
+              <label class="field-label" for="mcp-name">名称</label>
+              <input id="mcp-name" type="text" maxlength="32" placeholder="例如：campus-tools" required>
+              <p class="field-hint">引用工具时写「工具名@服务器名」，例如 <code>formula_hint@campus-tools</code>。</p>
+            </div>
+            <div class="field">
+              <label class="field-label" for="mcp-base">Base URL</label>
+              <input id="mcp-base" type="text" placeholder="http://mcp-demo:8090" required>
+            </div>
+            <div class="field">
+              <label class="field-label" for="mcp-token">令牌</label>
+              <input id="mcp-token" type="password" autocomplete="off" placeholder="编辑时留空表示不修改">
+              <p class="field-hint">令牌只保存在服务端，提交后立即清空，不会回显。</p>
+            </div>
+            <div class="btn-row">
+              <button type="submit" class="btn-primary">保存</button>
+              <button type="button" id="mcp-cancel" class="btn-ghost">取消</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card" id="mcp-tools-card" hidden>
+          <h2 id="mcp-tools-title">已发现的工具</h2>
+          <table id="mcp-tools-table">
+            <thead><tr><th>名称</th><th>说明</th><th>输入结构</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h2>最近调用</h2>
+          <p class="hint">一次调用一条记录：调了什么、成了没有、谁触发的、在哪次会话的第几轮、什么时候。</p>
+          <table id="mcp-calls-table">
+            <thead><tr><th>时间</th><th>工具</th><th>状态</th><th>用户</th><th>会话</th><th>轮次</th><th>摘要</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <p class="empty" id="mcp-calls-empty" hidden>还没有调用记录。</p>
         </div>
       </div>
 

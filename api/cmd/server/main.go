@@ -40,6 +40,7 @@ import (
 	"campusclaw/api/internal/index"
 	"campusclaw/api/internal/jwtauth"
 	"campusclaw/api/internal/materials"
+	"campusclaw/api/internal/mcp"
 	"campusclaw/api/internal/openapi"
 	"campusclaw/api/internal/qa"
 	"campusclaw/api/internal/retrieval"
@@ -123,8 +124,14 @@ func main() {
 	skillRepo := &skill.Repo{DB: database}
 	convRepo := &conversation.Repo{DB: database}
 
+	// 第 6 课：MCP 工具接入。令牌只存库，接口只回 has_auth。
+	mcpRepo := &mcp.Repo{DB: database}
+	mcpClient := mcp.NewClient(cfg.MCPTimeout)
+	mcpHandler := mcp.NewHandler(mcpRepo, mcpClient)
+
 	agentHandler := agent.NewHandler(agentRepo)
-	skillHandler := skill.NewHandler(skillRepo)
+	// 技能保存时用 mcpRepo 校验「工具名@服务器名」引用是否可用。
+	skillHandler := skill.NewHandler(skillRepo, mcpRepo)
 	convHandler := conversation.NewHandler(convRepo, agentRepo)
 	chatHandler := chat.NewHandler(&chat.Service{
 		DB:        database,
@@ -133,6 +140,10 @@ func main() {
 		Convs:     convRepo,
 		Retrieval: retriever,
 		Chat:      streamer,
+		MCP:       mcpRepo,
+		MCPClient: mcpClient,
+		MaxRounds: cfg.MCPMaxRounds,
+		MaxCalls:  cfg.MCPMaxCalls,
 		TopN:      cfg.AskTopN,
 	})
 
@@ -151,7 +162,7 @@ func main() {
 	routes := buildRoutes(endpoints{
 		auth: authHandler, materials: materialHandler, retrieval: retrievalHandler,
 		qa: qaHandler, agents: agentHandler, skills: skillHandler,
-		convs: convHandler, chat: chatHandler,
+		convs: convHandler, chat: chatHandler, mcp: mcpHandler,
 	})
 	register(mux, routes, authHandler)
 

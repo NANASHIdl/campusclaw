@@ -1010,6 +1010,472 @@
                 }
             }
         },
+        "/api/mcp/servers": {
+            "get": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "仅教师。响应不含令牌原文，只返回 has_auth 布尔值与工具数。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "mcp"
+                ],
+                "summary": "列出本班 MCP 服务器",
+                "operationId": "MCP-001",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "仅教师。令牌写入服务端，响应不返回令牌。同班同名返回 400；登记后状态为未连接。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "mcp"
+                ],
+                "summary": "登记 MCP 服务器",
+                "operationId": "MCP-002",
+                "parameters": [
+                    {
+                        "description": "服务器名称、地址与令牌",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_mcp.WriteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_mcp.Server"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/mcp/servers/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "仅教师。令牌留空表示不修改；修改地址或令牌后清空连接状态与已发现工具。跨班或不存在返回 404。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "mcp"
+                ],
+                "summary": "修改 MCP 服务器",
+                "operationId": "MCP-003",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "服务器编号",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "名称、地址与令牌",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_mcp.WriteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_mcp.Server"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "仅教师。删除服务器及其工具清单；历史调用记录保留。重复删除返回 404。",
+                "tags": [
+                    "mcp"
+                ],
+                "summary": "删除 MCP 服务器",
+                "operationId": "MCP-004",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "服务器编号",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "无响应体"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/mcp/servers/{id}/connect": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "仅教师。先 initialize 握手再 tools/list 发现；两步都成功才整体替换工具清单并标记已连接，任一步失败停在未连接并给出可读原因。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "mcp"
+                ],
+                "summary": "连接并发现工具",
+                "operationId": "MCP-005",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "服务器编号",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/mcp/servers/{id}/disconnect": {
+            "post": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "仅教师。清空该服务器的工具清单并置为未连接；重复断开幂等成功。断开后引用其工具的调用会被记为被拒。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "mcp"
+                ],
+                "summary": "断开 MCP 服务器",
+                "operationId": "MCP-006",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "服务器编号",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/mcp/servers/{id}/tools": {
+            "get": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "仅教师。返回最近一次连接写入的工具清单（含名称、说明与输入结构）；未连接时可能为空。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "mcp"
+                ],
+                "summary": "查看已发现的工具",
+                "operationId": "MCP-007",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "服务器编号",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/mcp/tool-calls": {
+            "get": {
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "description": "仅教师。返回本班最近的工具调用记录，按时间倒序，默认最多 50 条；含工具引用、服务器名、状态、用户、会话与轮次。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "mcp"
+                ],
+                "summary": "查看工具调用记录",
+                "operationId": "MCP-008",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/campusclaw_api_internal_httpx.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
         "/api/me": {
             "get": {
                 "security": [
@@ -1698,6 +2164,52 @@
                     "type": "integer"
                 },
                 "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_mcp.Server": {
+            "type": "object",
+            "properties": {
+                "base_url": {
+                    "type": "string"
+                },
+                "connected": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "has_auth": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "last_error": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tool_count": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_mcp.WriteRequest": {
+            "type": "object",
+            "properties": {
+                "auth_token": {
+                    "type": "string"
+                },
+                "base_url": {
+                    "type": "string"
+                },
+                "name": {
                     "type": "string"
                 }
             }

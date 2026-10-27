@@ -189,6 +189,54 @@ var schema = []string{
 		CONSTRAINT fk_msg_conv FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
 		INDEX idx_msg_conv (conversation_id, id)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+	// --- 第 6 课：MCP 工具接入 -------------------------------------------------
+
+	// auth_token 只落库，不出现在任何响应里；响应只给 has_auth 布尔值。
+	`CREATE TABLE IF NOT EXISTS mcp_servers (
+		id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+		class_id     INT NOT NULL,
+		name         VARCHAR(32) NOT NULL,
+		base_url     VARCHAR(255) NOT NULL,
+		auth_token   VARCHAR(255) NOT NULL,
+		connected    TINYINT(1) NOT NULL DEFAULT 0,
+		connected_at DATETIME NULL,
+		last_error   VARCHAR(255) NULL,
+		created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		UNIQUE KEY uk_mcp_server_name (class_id, name),
+		INDEX idx_mcp_server_class (class_id)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+	// 工具清单恒等于「最近一次成功的发现结果」：每次连接整体替换。
+	`CREATE TABLE IF NOT EXISTS mcp_tools (
+		id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+		server_id     BIGINT NOT NULL,
+		name          VARCHAR(64) NOT NULL,
+		description   TEXT NOT NULL,
+		input_schema  JSON NOT NULL,
+		discovered_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE KEY uk_mcp_tool (server_id, name),
+		CONSTRAINT fk_mcp_tool_server FOREIGN KEY (server_id) REFERENCES mcp_servers(id) ON DELETE CASCADE
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+	// 调用记录只增不改。server_id 不建外键：服务器删除后历史记录仍要保留。
+	`CREATE TABLE IF NOT EXISTS mcp_tool_calls (
+		id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+		class_id        INT NOT NULL,
+		server_id       BIGINT NULL,
+		server_name     VARCHAR(32) NOT NULL,
+		tool_name       VARCHAR(64) NOT NULL,
+		tool_ref        VARCHAR(100) NOT NULL,
+		status          ENUM('ok','denied','error') NOT NULL,
+		user_id         BIGINT NOT NULL,
+		conversation_id BIGINT NULL,
+		round_no        INT NOT NULL DEFAULT 1,
+		detail          TEXT NULL,
+		created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		INDEX idx_mcp_call_class (class_id, created_at),
+		INDEX idx_mcp_call_conv (conversation_id)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 }
 
 // Migrate 建表（幂等）。

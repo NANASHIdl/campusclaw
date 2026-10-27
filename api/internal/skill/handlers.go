@@ -2,18 +2,49 @@ package skill
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 
 	"campusclaw/api/internal/auth"
 	"campusclaw/api/internal/httpx"
+	"campusclaw/api/internal/mcp"
 )
 
-// Handler 暴露技能接口。写操作的路由已由 RequireTeacher 保护。
-type Handler struct{ Repo *Repo }
+// ToolValidator 在保存技能时校验工具引用是否可用。
+//
+// 定义成接口而不是直接依赖 mcp 包，是为了让解析与存取保持独立：
+// 没有注入校验器时（例如单元测试），只允许内置项。
+type ToolValidator interface {
+	ValidateRef(classID int64, raw string) error
+}
 
-func NewHandler(r *Repo) *Handler { return &Handler{Repo: r} }
+// Handler 暴露技能接口。写操作的路由已由 RequireTeacher 保护。
+type Handler struct {
+	Repo      *Repo
+	Validator ToolValidator
+}
+
+func NewHandler(r *Repo, v ToolValidator) *Handler {
+	return &Handler{Repo: r, Validator: v}
+}
+
+// validateTools 做保存前的语义校验：内置项放行，引用交给校验器。
+func (h *Handler) validateTools(classID int64, tools []string) error {
+	for _, item := range tools {
+		if mcp.IsBuiltin(item) {
+			continue
+		}
+		if h.Validator == nil {
+			return fmt.Errorf("工具引用暂不可用，请先配置工具服务")
+		}
+		if err := h.Validator.ValidateRef(classID, item); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // SourceRequest 是用技能文件新建/改写技能的请求体，供 OpenAPI 文档引用。
 type SourceRequest struct {
@@ -116,6 +147,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		httpx.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	if err := h.validateTools(user.ClassID, p.Tools); err != nil {
+		httpx.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
 	id, err := h.Repo.Create(user.ClassID, p)
 	if err != nil {
 		if errors.Is(err, ErrDuplicateName) {
@@ -170,6 +205,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := Parse(req.Source)
 	if err != nil {
+		httpx.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := h.validateTools(user.ClassID, p.Tools); err != nil {
 		httpx.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}

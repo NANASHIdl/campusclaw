@@ -91,11 +91,12 @@ function switchTab(name) {
   for (const btn of document.querySelectorAll('#tabs .tab')) {
     btn.classList.toggle('is-active', btn.dataset.tab === name);
   }
-  for (const t of ['chat', 'agents', 'skills', 'materials', 'search']) {
+  for (const t of ['chat', 'agents', 'skills', 'mcp', 'materials', 'search']) {
     el('tab-' + t).hidden = t !== name;
   }
   if (name === 'agents') loadAgents();
   if (name === 'skills') loadSkills();
+  if (name === 'mcp') loadMCP();
   if (name === 'chat') loadChatSelectors();
 }
 
@@ -116,6 +117,8 @@ function renderApp(user) {
 
   const isTeacher = user.role === 'teacher';
   el('upload-block').hidden = !isTeacher;
+  el('tab-btn-mcp').hidden = !isTeacher;
+  if (!isTeacher && state.tab === 'mcp') state.tab = 'chat';
   el('readonly-note').hidden = isTeacher;
   el('agent-form-card').hidden = true;
   el('skill-form-card').hidden = true;
@@ -589,6 +592,154 @@ el('skill-form').addEventListener('submit', async (e) => {
   showMessage((res.body && res.body.error) || '保存失败。', 'error');
 });
 
+// --- 工具服务（第 6 课） ------------------------------------------------------
+
+function renderMCPServers(servers) {
+  const tbody = el('mcp-table').querySelector('tbody');
+  tbody.innerHTML = '';
+  el('mcp-empty').hidden = servers.length > 0;
+
+  for (const s of servers) {
+    const tr = document.createElement('tr');
+    tr.appendChild(el2('td', '', String(s.id)));
+    tr.appendChild(el2('td', '', s.name));
+    tr.appendChild(el2('td', 'mono', s.base_url));
+    tr.appendChild(el2('td', '', s.has_auth ? '已配置' : '未配置'));
+    tr.appendChild(el2('td', '', s.connected ? '已连接' : '未连接'));
+    tr.appendChild(el2('td', 'mono', String(s.tool_count)));
+    tr.appendChild(el2('td', 'mono', s.last_error || '—'));
+
+    const actions = document.createElement('td');
+    const add = (label, handler) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'link';
+      b.textContent = label;
+      b.addEventListener('click', handler);
+      actions.appendChild(b);
+    };
+    add(s.connected ? '重新连接' : '连接并发现', () => connectMCP(s));
+    if (s.connected) add('断开', () => disconnectMCP(s));
+    add('查看工具', () => viewMCPTools(s));
+    add('编辑', () => openMCPForm(s));
+    add('删除', () => deleteMCP(s));
+    tr.appendChild(actions);
+    tbody.appendChild(tr);
+  }
+}
+
+function renderMCPCalls(calls) {
+  const tbody = el('mcp-calls-table').querySelector('tbody');
+  tbody.innerHTML = '';
+  el('mcp-calls-empty').hidden = calls.length > 0;
+  for (const c of calls) {
+    const tr = document.createElement('tr');
+    tr.appendChild(el2('td', 'mono', c.created_at));
+    tr.appendChild(el2('td', 'mono', c.tool_ref));
+    const statusLabel = c.status === 'ok' ? '成功' : (c.status === 'denied' ? '被拒' : '出错');
+    tr.appendChild(el2('td', '', statusLabel));
+    tr.appendChild(el2('td', 'mono', String(c.user_id)));
+    tr.appendChild(el2('td', 'mono', c.conversation_id ? String(c.conversation_id) : '—'));
+    tr.appendChild(el2('td', 'mono', String(c.round_no)));
+    tr.appendChild(el2('td', 'mono', c.detail || ''));
+    tbody.appendChild(tr);
+  }
+}
+
+async function loadMCP() {
+  const [sres, cres] = await Promise.all([api('/api/mcp/servers'), api('/api/mcp/tool-calls')]);
+  if (sres.status !== 200) return;
+  renderMCPServers((sres.body && sres.body.servers) || []);
+  renderMCPCalls((cres.body && cres.body.calls) || []);
+}
+
+function openMCPForm(server) {
+  el('mcp-id').value = server ? String(server.id) : '';
+  el('mcp-form-title').textContent = server ? `编辑工具服务 #${server.id}` : '登记工具服务';
+  el('mcp-name').value = server ? server.name : '';
+  el('mcp-base').value = server ? server.base_url : '';
+  el('mcp-token').value = '';
+  el('mcp-form-card').hidden = false;
+}
+
+async function connectMCP(server) {
+  const res = await postJSON(`/api/mcp/servers/${server.id}/connect`, {});
+  if (res.status === 200) {
+    const n = ((res.body && res.body.tools) || []).length;
+    showMessage(`已连接「${server.name}」，发现 ${n} 个工具。`, 'info');
+    await loadMCP();
+    return;
+  }
+  showMessage((res.body && res.body.error) || '连接失败。', 'error');
+  await loadMCP();
+}
+
+async function disconnectMCP(server) {
+  const res = await postJSON(`/api/mcp/servers/${server.id}/disconnect`, {});
+  if (res.status === 200) {
+    showMessage(`已断开「${server.name}」。`, 'info');
+    await loadMCP();
+    return;
+  }
+  showMessage((res.body && res.body.error) || '断开失败。', 'error');
+}
+
+async function viewMCPTools(server) {
+  const res = await api(`/api/mcp/servers/${server.id}/tools`);
+  if (res.status !== 200) {
+    showMessage((res.body && res.body.error) || '读取工具清单失败。', 'error');
+    return;
+  }
+  const tools = (res.body && res.body.tools) || [];
+  el('mcp-tools-title').textContent = `已发现的工具 · ${server.name}（${tools.length}）`;
+  const tbody = el('mcp-tools-table').querySelector('tbody');
+  tbody.innerHTML = '';
+  for (const t of tools) {
+    const tr = document.createElement('tr');
+    tr.appendChild(el2('td', 'mono', t.name));
+    tr.appendChild(el2('td', '', t.description || ''));
+    tr.appendChild(el2('td', 'mono', JSON.stringify(t.input_schema || {})));
+    tbody.appendChild(tr);
+  }
+  el('mcp-tools-card').hidden = false;
+}
+
+async function deleteMCP(server) {
+  if (!confirm(`确定删除工具服务「${server.name}」？已发现的工具会一并清空，历史调用记录保留。`)) return;
+  const res = await api(`/api/mcp/servers/${server.id}`, { method: 'DELETE' });
+  if (res.status === 204) {
+    showMessage('已删除。', 'info');
+    await loadMCP();
+    return;
+  }
+  showMessage((res.body && res.body.error) || '删除失败。', 'error');
+}
+
+el('mcp-cancel').addEventListener('click', () => {
+  el('mcp-form-card').hidden = true;
+});
+
+el('mcp-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = el('mcp-id').value;
+  const payload = {
+    name: el('mcp-name').value.trim(),
+    base_url: el('mcp-base').value.trim(),
+    auth_token: el('mcp-token').value,
+  };
+  const res = id
+    ? await putJSON(`/api/mcp/servers/${id}`, payload)
+    : await postJSON('/api/mcp/servers', payload);
+  // 令牌输入框提交后立刻清空，不回显。
+  el('mcp-token').value = '';
+  if (res.status === 200 || res.status === 201) {
+    showMessage('已保存。', 'info');
+    await loadMCP();
+    return;
+  }
+  showMessage((res.body && res.body.error) || '保存失败。', 'error');
+});
+
 // --- 对话 -------------------------------------------------------------------
 
 async function loadChatSelectors() {
@@ -748,8 +899,20 @@ el('conv-form').addEventListener('submit', async (e) => {
       (payload.citations || []).forEach((c, i) => {
         citesEl.appendChild(el2('span', 'badge', `[${i + 1}] ${c.material_title} · 切片 ${c.chunk_index}`));
       });
+      if (payload.tool_calls && payload.tool_calls.length) {
+        const toolsBox = el2('div', 'msg-tools');
+        payload.tool_calls.forEach((t) => {
+          const label = t.status === 'ok' ? '成功' : (t.status === 'denied' ? '被拒' : '出错');
+          toolsBox.appendChild(el2('span', 'badge badge-tool',
+            `[工具] ${t.ref} · ${label}`));
+        });
+        bot.insertBefore(toolsBox, citesEl);
+      }
       const bits = [];
       bits.push(payload.status === 'ok' ? '已找到依据' : '本轮没有检索到资料');
+      if (payload.tool_calls && payload.tool_calls.length) {
+        bits.push(`工具调用 ${payload.tool_calls.length} 次`);
+      }
       if (payload.skill) bits.push(`技能：${payload.skill.name}`);
       el('conv-meta').textContent = bits.join(' · ');
     } else if (event === 'delta') {

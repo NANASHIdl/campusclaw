@@ -38,6 +38,14 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  # 第 6 课：自建的 MCP 工具服务。只在容器网络内可达，不映射宿主机端口。
+  # 令牌只从环境变量注入，不写进镜像。
+  mcp-demo:
+    build: ./mcp-server
+    environment:
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN}
+    restart: unless-stopped
+
   db:
     image: mysql:8.0
     command:

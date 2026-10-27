@@ -151,6 +151,36 @@ definitions:
       title:
         type: string
     type: object
+  internal_mcp.Server:
+    properties:
+      base_url:
+        type: string
+      connected:
+        type: boolean
+      created_at:
+        type: string
+      has_auth:
+        type: boolean
+      id:
+        type: integer
+      last_error:
+        type: string
+      name:
+        type: string
+      tool_count:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  internal_mcp.WriteRequest:
+    properties:
+      auth_token:
+        type: string
+      base_url:
+        type: string
+      name:
+        type: string
+    type: object
   internal_qa.Answer:
     properties:
       answer:
@@ -931,6 +961,308 @@ paths:
       summary: 上传本班材料
       tags:
       - materials
+  /api/mcp/servers:
+    get:
+      description: 仅教师。响应不含令牌原文，只返回 has_auth 布尔值与工具数。
+      operationId: MCP-001
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+      security:
+      - bearerAuth: []
+      summary: 列出本班 MCP 服务器
+      tags:
+      - mcp
+    post:
+      consumes:
+      - application/json
+      description: 仅教师。令牌写入服务端，响应不返回令牌。同班同名返回 400；登记后状态为未连接。
+      operationId: MCP-002
+      parameters:
+      - description: 服务器名称、地址与令牌
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_mcp.WriteRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_mcp.Server'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+      security:
+      - bearerAuth: []
+      summary: 登记 MCP 服务器
+      tags:
+      - mcp
+  /api/mcp/servers/{id}:
+    delete:
+      description: 仅教师。删除服务器及其工具清单；历史调用记录保留。重复删除返回 404。
+      operationId: MCP-004
+      parameters:
+      - description: 服务器编号
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: 无响应体
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+      security:
+      - bearerAuth: []
+      summary: 删除 MCP 服务器
+      tags:
+      - mcp
+    put:
+      consumes:
+      - application/json
+      description: 仅教师。令牌留空表示不修改；修改地址或令牌后清空连接状态与已发现工具。跨班或不存在返回 404。
+      operationId: MCP-003
+      parameters:
+      - description: 服务器编号
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 名称、地址与令牌
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_mcp.WriteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_mcp.Server'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+      security:
+      - bearerAuth: []
+      summary: 修改 MCP 服务器
+      tags:
+      - mcp
+  /api/mcp/servers/{id}/connect:
+    post:
+      description: 仅教师。先 initialize 握手再 tools/list 发现；两步都成功才整体替换工具清单并标记已连接，任一步失败停在未连接并给出可读原因。
+      operationId: MCP-005
+      parameters:
+      - description: 服务器编号
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+      security:
+      - bearerAuth: []
+      summary: 连接并发现工具
+      tags:
+      - mcp
+  /api/mcp/servers/{id}/disconnect:
+    post:
+      description: 仅教师。清空该服务器的工具清单并置为未连接；重复断开幂等成功。断开后引用其工具的调用会被记为被拒。
+      operationId: MCP-006
+      parameters:
+      - description: 服务器编号
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+      security:
+      - bearerAuth: []
+      summary: 断开 MCP 服务器
+      tags:
+      - mcp
+  /api/mcp/servers/{id}/tools:
+    get:
+      description: 仅教师。返回最近一次连接写入的工具清单（含名称、说明与输入结构）；未连接时可能为空。
+      operationId: MCP-007
+      parameters:
+      - description: 服务器编号
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+      security:
+      - bearerAuth: []
+      summary: 查看已发现的工具
+      tags:
+      - mcp
+  /api/mcp/tool-calls:
+    get:
+      description: 仅教师。返回本班最近的工具调用记录，按时间倒序，默认最多 50 条；含工具引用、服务器名、状态、用户、会话与轮次。
+      operationId: MCP-008
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/campusclaw_api_internal_httpx.ErrorBody'
+      security:
+      - bearerAuth: []
+      summary: 查看工具调用记录
+      tags:
+      - mcp
   /api/me:
     get:
       description: 返回令牌 sub 对应的角色与班级，供界面决定是否显示教师入口。授权仍以服务端角色校验为准。
