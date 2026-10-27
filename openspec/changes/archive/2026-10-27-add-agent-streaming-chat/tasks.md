@@ -122,7 +122,7 @@
 - [x] 13.3 第 3、4 课回归（需同步改为 Bearer） — verify: `verify_e2e.py` 与 `verify_retrieval.py` 全 PASS
 - [x] 13.4 `openspec validate add-agent-streaming-chat --strict` — verify: exit 0
 - [x] 13.5 `down` 后 `up` 数据仍在（会话、消息、智能体、技能） — verify: 重启后历史会话可读
-- [ ] 13.6 归档：`openspec archive add-agent-streaming-chat` — verify: 并入 `specs/{agent-chat,api-docs}/` 并更新 `specs/auth-upload/`。**待课程确认后执行**
+- [x] 13.6 归档：`openspec archive add-agent-streaming-chat` — verify: 并入 `specs/{agent-chat,api-docs}/` 并更新 `specs/auth-upload/`
 
 ## 验收记录（13.2）
 
@@ -233,7 +233,8 @@ node scripts/verify_frontend.mjs    # 42 条断言 + 截图落在 scripts/.front
 
 ### 未勾选项
 
-- **13.6（归档）**：规约写明「待课程确认后执行」，本课不归档。
+无。13.6 已于 2026-10-27 归档（`openspec/changes/archive/2026-10-27-add-agent-streaming-chat/`），
+主规约并入 `specs/{agent-chat,api-docs}/` 并更新 `specs/auth-upload/`。
 
 ### 已知副作用与注意点
 
@@ -242,3 +243,18 @@ node scripts/verify_frontend.mjs    # 42 条断言 + 截图落在 scripts/.front
 - 第 5 课脚本的「未绑定材料」必须与第 4 课保留词**语义也不相近**：最初用「光系统Ⅱ」，
   虽不含「类囊体」三字，但向量检索把光合作用材料当作近邻命中，第 4 课回归一度 70/72；
   现已改用地理「等高线」，并在库中清掉此前注入的生物材料与向量点。
+
+### 归档时同步修正的一处规约漂移
+
+归档合并后 `specs/auth-upload/spec.md` 出现自相矛盾：「数据模型与租户列」仍要求
+`sessions` 表，而同一文件新增的「JWT 访问令牌与登录」已把会话状态交给 JWT 与吊销表，
+本课的迁移也已 `DROP TABLE IF EXISTS sessions`。
+
+本 change 的 delta 只写了「REMOVED 服务端会话与登录 + ADDED JWT 访问令牌与登录」，
+没有把「数据模型」这条 Requirement 一并标为 MODIFIED，属于 delta 覆盖不全。
+归档后直接修正了主规约该句：改为「`classes`、`users`、`materials`、`knowledge_entries`
+等业务表 + 令牌吊销表 `revoked_tokens`，`sessions` 表 MUST NOT 存在」，
+并 `openspec validate --all --strict` 复核（4 passed）。
+
+教训：删表这类迁移，delta 里除了「会话与登录」，还要检查「数据模型」这类描述表清单的
+Requirement 是否需要 MODIFIED，否则归档后主规约会保留已经不存在的表。
